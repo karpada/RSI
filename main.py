@@ -472,7 +472,8 @@ async def send_metrics():
         try:
             # TODO: add micropython.mem_info()
             if 'thingsspeak_apikey' in config['options']['monitoring']:
-                requests.get(f"http://api.thingspeak.com/update?api_key={config['options']['monitoring']['thingsspeak_apikey']}&field1={get_soil_moisture_milli()}&field2={gc.mem_alloc()}&field3={valve_status}&field4={irrigation_factor}&field5={esp32.mcu_temperature()}", timeout=10).close()
+                # &field4={gc.mem_alloc()}&field5={esp32.mcu_temperature()}
+                requests.get(f"http://api.thingspeak.com/update?api_key={config['options']['monitoring']['thingsspeak_apikey']}&field1={valve_status}&field2={get_soil_moisture_milli()}&field3={irrigation_factor}", timeout=10).close()
         except Exception as e:
             print(f"Error sending metrics: {e}")
         finally:
