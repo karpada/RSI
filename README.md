@@ -12,6 +12,9 @@
 
 ## UI
 ![Phone](readme_images/ui-phone.jpg)
+### Monitoring
+Soil moisture, irrigation at 7:00 AM
+![](readme_images/soil-moisture-graph.png)
 
 # Hardware
 
@@ -34,7 +37,7 @@
 ## Controller
 This project is based on [ESP32-S2](https://www.espressif.com/en/products/socs/esp32-s2) + [MicroPython](https://docs.micropython.org/en/latest/esp32/quickref.html)
 
-### Considerations
+### Considerations for ESP32-S2
 1. Built-in WiFi
 1. [Lots of GPIOs](https://www.sudo.is/docs/esphome/boards/esp32s2mini/ESP32_S2_mini_pinout.jpg)
 1. Easy to use - [Thonny (Python IDE)](https://thonny.org/)
