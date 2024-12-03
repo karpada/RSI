@@ -12,7 +12,7 @@ from collections import namedtuple
 from uos import rename, stat
 
 # Global variables
-micropython_to_timestamp: int = 3155673600 - 2208988800  # 1970-2000
+MICROPYTHON_TO_TIMESTAMP: int = 946684800 # 2000-1970 --> 3155673600 - 2208988800
 micropython_to_localtime: int = None
 wlan: network.WLAN = network.WLAN(network.STA_IF)
 config: dict = None
@@ -78,10 +78,10 @@ def weekday(timestamp: int) -> int:
 async def sync_ntp() -> bool:
     try:
         ntptime.settime()
-        print(f'@{time.time()} NTP synced, UTC time={time.time()+micropython_to_timestamp} Local time(GMT{config['options']['settings']['timezone_offset']:+})={time.time()+micropython_to_localtime}')
+        print(f'@{time.time()} NTP synced, UTC time={time.time()+MICROPYTHON_TO_TIMESTAMP} Local time(GMT{config["options"]["settings"]["timezone_offset"]:+})={time.time()+micropython_to_localtime}')
         return True
     except:
-        print(f'@{time.time()} Error syncing time, current UTC timestamp={time.time()+micropython_to_timestamp}')
+        print(f'@{time.time()} Error syncing time, current UTC timestamp={time.time()+MICROPYTHON_TO_TIMESTAMP}')
         return False
 
 async def periodic_ntp_sync():
@@ -291,7 +291,7 @@ def apply_config(new_config: dict) -> None:
 
     config = normalized_config
 
-    micropython_to_localtime = micropython_to_timestamp + round(config['options']['settings']['timezone_offset'] * 3600)
+    micropython_to_localtime = MICROPYTHON_TO_TIMESTAMP + round(config['options']['settings']['timezone_offset'] * 3600)
     heartbeat_pin_id = config['options']['settings']['heartbeat_pin_id']
 
 def read_soil_moisture_raw() -> int:
@@ -388,6 +388,7 @@ async def handle_request(reader, writer):
 
         print(f"@{time.time()} Request: {method:4} {path:14} query_params={query_params}, (content_length={content_length})")  #     headers={headers}")
 
+        response = "Should not happen"
         if method == 'GET' and path == '/':
             filename = 'setup.html' if wifi_setup_mode else 'index.html'
             content_type = 'text/html'
@@ -436,14 +437,13 @@ async def handle_request(reader, writer):
                 "hostname": config['options']['wifi']['hostname'],
             })
         elif wifi_setup_mode and method == 'GET' and path == '/setup':
-                print(f"Setup: query_params={query_params}")
-                save_as_json('config.json', {"options": { "wifi": query_params }})
-                print("Restarting...")
-                await asyncio.sleep(0.1)
-                if heartbeat_pin_id > 0:
-                    Pin(heartbeat_pin_id, Pin.IN)
-                reset()
-
+            print(f"Setup: query_params={query_params}")
+            save_as_json('config.json', {"options": { "wifi": query_params }})
+            print("Restarting...")
+            await asyncio.sleep(0.1)
+            if heartbeat_pin_id > 0:
+                Pin(heartbeat_pin_id, Pin.IN)
+            reset()
         else:
             response = f"Resource not found: method={method} path={path}"
             status_code = 404
