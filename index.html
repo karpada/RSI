@@ -17,6 +17,31 @@
         input.narrow {
             width: 40px;
         }
+
+        .weekDays-selector {
+            width: 170px;
+            /* display: flex; */
+            justify-content: space-between;
+        }
+
+        .weekDays-selector input {
+            display: none!important;
+        }
+
+        .weekDays-selector input[type=checkbox] + label {
+            display: inline-block;
+            border-radius: 3px;
+            background: #dddddd;
+            height: 30px;
+            width: 15px;
+            line-height: 30px;
+            text-align: center;
+            cursor: pointer;
+        }
+        .weekDays-selector input[type=checkbox]:checked + label {
+            background: dodgerblue;
+        }
+
     </style>
 </head>
 <body class="bg-gray-100">
@@ -152,6 +177,7 @@
                             <th>Start Time</th>
                             <th>Duration (minutes)</th>
                             <th class="narrow">Enabled</th>
+                            <th class="narrow">Weekdays</th>
                             <th class="narrow">Apply Factor</th>
                             <th>Expiry</th>
                             <th>Action</th>
@@ -170,6 +196,12 @@
                                 <td class="border px-4 py-2"><input type="time" value="${String(Math.floor(schedule.start_sec / 3600)).padStart(2, "0")}:${String(Math.floor(schedule.start_sec/60) % 60).padStart(2, "0")}" onchange="updateSchedule(${index}, 'start_sec', this.value)"></td>
                                 <td class="border px-4 py-2 narrow"><input class="narrow" type="number" value="${Math.round(schedule.duration_sec/6)/10}" onchange="updateSchedule(${index}, 'duration_sec', this.value*60)"></td>
                                 <td class="border px-4 py-2 narrow"><input type="checkbox" ${schedule.enabled ? 'checked' : ''} onchange="updateSchedule(${index}, 'enabled', this.checked)" class="w-4 h-4"></td>
+                                <td class="border px-4 py-2 weekDays-selector">
+                                    ${'MTWTFSS'.split('').map((day_label, day_index) => `
+                                        <input type="checkbox" ${schedule.day_mask&1<<day_index ? 'checked' : ''} onchange="updateSchedule(${index}, 'day_mask${day_index}', this.checked)" id="schedule${index}-weekday${day_index}" class="weekday" />
+                                        <label for="schedule${index}-weekday${day_index}">${day_label}</label>
+                                    `).join('')}
+                                </td>
                                 <td class="border px-4 py-2 narrow"><input type="checkbox" ${schedule.enable_irrigation_factor ? 'checked' : ''} onchange="updateSchedule(${index}, 'enable_irrigation_factor', this.checked)" class="w-4 h-4"></td>
                                 <td class="border px-4 py-2"><input type="datetime-local" value="${schedule.expiry ? new Date(schedule.expiry * 1000).toISOString().slice(0, 16) : ""}" onchange="updateSchedule(${index}, 'expiry', this.value ? new Date(this.value).getTime() / 1000) : 0"></td>
                                 <td class="border px-4 py-2"><button onclick="removeSchedule(${index})" class="bg-red-500 text-white px-2 py-1 rounded">Remove</button></td>
@@ -220,9 +252,17 @@
         function updateSchedule(index, field, value) {
             if ('start_sec' === field) {
                 const [hours, minutes] = value.split(':');
-                value = Number(hours) * 3600 + Number(minutes) * 60;
+                config.schedules[index][field] = Number(hours) * 3600 + Number(minutes) * 60;
+            } else if (field.startsWith('day_mask')) {
+                const day_index = Number(field.slice(-1));
+                if (value) {
+                    config.schedules[index].day_mask |= 1 << day_index;
+                } else {
+                    config.schedules[index].day_mask &= ~(1 << day_index);
+                }
+            } else {
+                config.schedules[index][field] = value;
             }
-            config.schedules[index][field] = value;
             renderSchedules();
         }
 

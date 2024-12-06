@@ -71,10 +71,6 @@ async def keep_wifi_connected():
 def get_local_timestamp() -> int:
     return time.time()+micropython_to_localtime
 
-def weekday(timestamp: int) -> int:
-    # weekday is 0-6 for Mon-Sun.
-    return ((timestamp or get_local_timestamp()) // 86400 + 3) % 7
-
 async def sync_ntp() -> bool:
     try:
         ntptime.settime()
@@ -168,17 +164,16 @@ async def schedule_irrigation():
             if s['expiry'] and local_timestamp > s['expiry']:
                 continue
 
-            # TODO: check week days
-            # weekday_start = weekday(local_timestamp+sec_till_start) + 6 % 7
-            # if ~s['day_mask'] & (1 << weekday()):
-            #     continue
-            # FIXME %86400 assumes the schedule is within a day, this isn't true for non daily schedules
-
             sec_till_start = (86400 + s['start_sec'] - local_timestamp % 86400) % 86400
             duration_sec = round(s['duration_sec'])
             sec_till_end = (sec_till_start + duration_sec) % 86400
             if sec_till_end >= sec_till_start:
                 # we are not inside the schedule
+                continue
+
+            # weekday of current schedule start time, monday is 0, sunday is 6
+            weekday = ((local_timestamp + sec_till_start) // 86400 + 2) % 7
+            if not s['day_mask'] & (1 << weekday):
                 continue
 
             if (config['options']['irrigation_factor']['reference_schedule_id'] == i and
@@ -244,6 +239,7 @@ def apply_config(new_config: dict) -> None:
             "duration_sec": int(schedule_data['duration_sec']),
             "enable_irrigation_factor": bool(schedule_data['enable_irrigation_factor']),
             "enabled": bool(schedule_data['enabled']),
+            "day_mask": int(schedule_data.get('day_mask', 0b1111111)),
             "expiry": int(schedule_data.get('expiry', 0)),
         })
     bo = new_config.get('options', {})

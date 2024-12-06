@@ -145,6 +145,7 @@ curl ${URL}/status | jq
 ```
 
 # TODO
+1. Make moisture sensor a property of zone
 1. Implement pause_hours
-1. manual watering
+1. Manual watering
 1.
