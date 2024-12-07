@@ -3,10 +3,10 @@ import utime as time
 from machine import Pin, ADC, PWM, reset, freq
 import esp32
 import ujson
-import ntptime
+from ntptime import settime
 import uasyncio as asyncio
 import urequests as requests
-import gc
+from gc import mem_alloc, mem_free
 import sys
 from collections import namedtuple
 from uos import rename, stat
@@ -21,7 +21,6 @@ schedule_status: int = 0
 irrigation_factor: float = 1.0
 heartbeat_pin_id: int = -1
 wifi_setup_mode = False
-# id: str = ':'.join([f"{b:02X}" for b in wlan.config('mac')[3:]]) FIXME: memory allocation failed, no idea why
 
 # Persistent storage functions
 def save_as_json(filename: str, data: dict) -> None:
@@ -73,7 +72,7 @@ def get_local_timestamp() -> int:
 
 async def sync_ntp() -> bool:
     try:
-        ntptime.settime()
+        settime()
         print(f'@{time.time()} NTP synced, UTC time={time.time()+MICROPYTHON_TO_TIMESTAMP} Local time(GMT{config["options"]["settings"]["timezone_offset"]:+})={time.time()+micropython_to_localtime}')
         return True
     except:
@@ -424,8 +423,8 @@ async def handle_request(reader, writer):
                 "local_timestamp": get_local_timestamp(),
                 "soil_moisture_milli": soil_moisture_milli,
                 "soil_moisture_raw": soil_moisture_raw,
-                "gc.mem_alloc": gc.mem_alloc(),
-                "gc.mem_free": gc.mem_free(),
+                "gc.mem_alloc": mem_alloc(),
+                "gc.mem_free": mem_free(),
                 "valve_status": f"{valve_status:08b}",
                 "schedule_status": f"{schedule_status:08b}",
                 "mcu_temperature": esp32.mcu_temperature(),
