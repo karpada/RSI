@@ -160,13 +160,16 @@ async def schedule_irrigation():
             if not s['enabled']:
                 continue
 
+            if s['duration_sec'] <= 0:
+                continue
+
             if s['expiry'] and local_timestamp > s['expiry']:
                 continue
 
             sec_till_start = (86400 + s['start_sec'] - local_timestamp % 86400) % 86400
             duration_sec = round(s['duration_sec'])
             sec_till_end = (sec_till_start + duration_sec) % 86400
-            if sec_till_end >= sec_till_start:
+            if sec_till_end > sec_till_start:
                 # we are not inside the schedule
                 continue
 
