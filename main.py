@@ -226,23 +226,23 @@ def apply_config(new_config: dict) -> None:
     global heartbeat_pin_id
 
     normalized_config = {"zones": [], "schedules": [], "options": {}}
-    for i, zone_data in enumerate(new_config.get('zones', [])):
+    for i, z in enumerate(new_config.get('zones', [])):
         normalized_config['zones'].append({
-            "name": str(zone_data.get('name', f'zone-{i}')),
-            "master": bool(zone_data.get('master', False)),
-            "active_is_high": bool(zone_data.get('active_is_high', True)),
-            "on_pin": int(zone_data.get('on_pin', -1)),
-            "off_pin": int(zone_data.get('off_pin', -1)),
+            "name": str(z.get('name', f'zone-{i}')),
+            "master": bool(z.get('master', False)),
+            "active_is_high": bool(z.get('active_is_high', True)),
+            "on_pin": int(z.get('on_pin', -1)),
+            "off_pin": int(z.get('off_pin', -1)),
         })
-    for schedule_data in new_config.get('schedules', []):
+    for s in new_config.get('schedules', []):
         normalized_config['schedules'].append({
-            "zone_id": int(schedule_data['zone_id']),
-            "start_sec": int(schedule_data['start_sec']),
-            "duration_sec": int(schedule_data['duration_sec']),
-            "enable_irrigation_factor": bool(schedule_data['enable_irrigation_factor']),
-            "enabled": bool(schedule_data['enabled']),
-            "day_mask": int(schedule_data.get('day_mask', 0b1111111)),
-            "expiry": int(schedule_data.get('expiry', 0)),
+            "zone_id": int(s['zone_id']),
+            "start_sec": int(s['start_sec']),
+            "duration_sec": int(s['duration_sec']),
+            "enable_irrigation_factor": bool(s['enable_irrigation_factor']),
+            "enabled": bool(s['enabled']),
+            "day_mask": int(s.get('day_mask', 0b1111111)),
+            "expiry": int(s.get('expiry', 0)),
         })
     bo = new_config.get('options', {})
     for key in ['wifi', 'irrigation_factor', 'monitoring', 'soil_moisture_sensor', 'settings']:
