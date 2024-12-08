@@ -112,9 +112,7 @@
                 document.getElementById('main-title').textContent = document.title;
 
                 const element = document.getElementById('status-content');
-                element.innerHTML = Object.entries(status).reduce((acc, entry) => {
-                    return acc.concat(`<p>${entry[0]}: ${entry[1]}</p>`);
-                }, '');
+                element.innerHTML = `<pre>${JSON.stringify(status, null, 2)}</pre>`;
 
                 config.zones.forEach((zone, index) => {
                     const zoneElement = document.getElementById(`zone${index}`);
@@ -148,6 +146,11 @@
                             <th>Active is High</th>
                             <th>On Pin</th>
                             <th>Off Pin</th>
+                            <th>Irrigation Factor Override</th>
+                            <th>Soil Moisture Dry</th>
+                            <th>Soil Moisture Wet</th>
+                            <th>Soil Moisture ADC Pin</th>
+                            <th>Soil Moisture Power Pin</th>
                             <th>Action</th>
                         </tr>
                     </thead>
@@ -159,6 +162,11 @@
                                 <td class="border px-4 py-2 narrow"><input type="checkbox" ${zone.active_is_high ? 'checked' : ''} onchange="updateZone(${index}, 'active_is_high', this.checked)" class="w-4 h-4"></td>
                                 <td class="border px-4 py-2 narrow"><input class="narrow" type="number" value="${zone.on_pin}" onchange="updateZone(${index}, 'on_pin', this.value)"></td>
                                 <td class="border px-4 py-2 narrow"><input class="narrow" type="number" value="${zone.off_pin}" onchange="updateZone(${index}, 'off_pin', this.value)"></td>
+                                <td class="border px-4 py-2 narrow"><input class="narrow" type="number" value="${zone.irrigation_factor_override}" onchange="updateZone(${index}, 'irrigation_factor_override', this.value)"></td>
+                                <td class="border px-4 py-2 narrow"><input class="narrow" type="number" value="${zone.soil_moisture_dry}" onchange="updateZone(${index}, 'soil_moisture_dry', this.value)"></td>
+                                <td class="border px-4 py-2 narrow"><input class="narrow" type="number" value="${zone.soil_moisture_wet}" onchange="updateZone(${index}, 'soil_moisture_wet', this.value)"></td>
+                                <td class="border px-4 py-2 narrow"><input class="narrow" type="number" value="${zone.adc_pin_id}" onchange="updateZone(${index}, 'adc_pin_id', this.value)"></td>
+                                <td class="border px-4 py-2 narrow"><input class="narrow" type="number" value="${zone.power_pin_id}" onchange="updateZone(${index}, 'power_pin_id', this.value)"></td>
                                 <td class="border px-4 py-2"><button onclick="removeZone(${index})" class="bg-red-500 text-white px-2 py-1 rounded">Remove</button></td>
                             </tr>
                         `).join('')}
@@ -178,7 +186,7 @@
                             <th>Duration (minutes)</th>
                             <th class="narrow">Enabled</th>
                             <th class="narrow">Weekdays</th>
-                            <th class="narrow">Apply Factor</th>
+                            <th class="narrow">Use Soil Moisture Sensor</th>
                             <th>Expiry</th>
                             <th>Action</th>
                         </tr>
@@ -202,7 +210,7 @@
                                         <label for="schedule${index}-weekday${day_index}">${day_label}</label>
                                     `).join('')}
                                 </td>
-                                <td class="border px-4 py-2 narrow"><input type="checkbox" ${schedule.enable_irrigation_factor ? 'checked' : ''} onchange="updateSchedule(${index}, 'enable_irrigation_factor', this.checked)" class="w-4 h-4"></td>
+                                <td class="border px-4 py-2 narrow"><input type="checkbox" ${schedule.enable_soil_moisture_sensor ? 'checked' : ''} onchange="updateSchedule(${index}, 'enable_soil_moisture_sensor', this.checked)" class="w-4 h-4"></td>
                                 <td class="border px-4 py-2"><input type="datetime-local" value="${schedule.expiry ? new Date(schedule.expiry * 1000).toISOString().slice(0, 16) : ""}" onchange="updateSchedule(${index}, 'expiry', this.value ? new Date(this.value).getTime() / 1000) : 0"></td>
                                 <td class="border px-4 py-2"><button onclick="removeSchedule(${index})" class="bg-red-500 text-white px-2 py-1 rounded">Remove</button></td>
                             </tr>
@@ -267,7 +275,18 @@
         }
 
         function addZone() {
-            config.zones.push({ name: "New Zone", on_pin: 0, off_pin: 0 });
+            config.zones.push({
+                name: "New Zone",
+                master: false,
+                active_is_high: true,
+                on_pin: 0,
+                off_pin: 0,
+                irrigation_factor_override: -1,
+                soil_moisture_dry: 300,
+                soil_moisture_wet: 700,
+                adc_pin_id: 12,
+                power_pin_id: 13,
+            });
             renderZones();
             renderSchedules();
         }
@@ -290,11 +309,12 @@
                 return;
             }
             config.schedules.push({
+                enabled: true,
                 zone_id: 0,
                 start_sec: "07:00",
                 duration_sec: 600,
-                enabled: true,
-                enable_irrigation_factor: true,
+                enable_soil_moisture_sensor: true,
+                day_mask: 0b1111111,
                 expiry: 0,
             });
             renderSchedules();

@@ -1,14 +1,14 @@
+import sys
+from collections import namedtuple
+from gc import mem_alloc, mem_free
 import network
 import utime as time
 from machine import Pin, ADC, PWM, reset, freq
-import esp32
+from esp32 import mcu_temperature
 import ujson
 from ntptime import settime
 import uasyncio as asyncio
 import urequests as requests
-from gc import mem_alloc, mem_free
-import sys
-from collections import namedtuple
 from uos import rename, stat
 
 # Global variables
@@ -18,26 +18,24 @@ wlan: network.WLAN = network.WLAN(network.STA_IF)
 config: dict = None
 valve_status: int = 0
 schedule_status: int = 0
-irrigation_factor: float = 1.0
 heartbeat_pin_id: int = -1
 wifi_setup_mode = False
+schedule_completed_until = []
 
 # Persistent storage functions
 def save_as_json(filename: str, data: dict) -> None:
     print(f"Saving data to {filename}")
-    with open(filename, 'w') as f:
+    with open(filename, 'w', encoding='utf-8') as f:
         ujson.dump(data, f)
 
 def load_from_json(filename: str) -> dict:
     try:
-        with open(filename, 'r') as f:
+        with open(filename, 'r', encoding='utf-8') as f:
             return ujson.load(f)
     except:
         return None
 
 async def connect_wifi() -> None:
-    global irrigation_factor
-
     try:
         if not config['options']['wifi']['ssid']:
             return
@@ -45,7 +43,7 @@ async def connect_wifi() -> None:
         wlan.active(True)
         print(f'@{time.time()} wifi connecting.', end='')
         wlan.connect(config['options']['wifi']['ssid'], config['options']['wifi']['password'])
-        for i in range(15):
+        for _ in range(15):
             if wlan.isconnected():
                 break
             await asyncio.sleep(1)
@@ -135,8 +133,6 @@ async def apply_valves(new_status: int) -> None:
 ######################
 async def schedule_irrigation():
     global schedule_status
-    global irrigation_factor
-    irrigation_factor_expiration: int = 0
 
     await asyncio.sleep(5)
     while True:
@@ -145,15 +141,13 @@ async def schedule_irrigation():
 
         local_timestamp = get_local_timestamp()
 
-        if config['options']['irrigation_factor']['override'] >= 0:
-            irrigation_factor = config['options']['irrigation_factor']['override']
-        elif local_timestamp > irrigation_factor_expiration:
-            irrigation_factor = 1
-
         valve_desired = 0
         new_schedule_status = 0
         for i, s in enumerate(config["schedules"]):
             # print(f"@{time.time()} checking schedule={s}")
+            if schedule_completed_until[i] > local_timestamp:
+                continue
+
             if not config['options']['settings']['enable_irrigation_schedule']:
                 continue
 
@@ -165,39 +159,43 @@ async def schedule_irrigation():
 
             if s['expiry'] and local_timestamp > s['expiry']:
                 continue
+        
 
             sec_till_start = (86400 + s['start_sec'] - local_timestamp % 86400) % 86400
             duration_sec = round(s['duration_sec'])
             sec_till_end = (sec_till_start + duration_sec) % 86400
-            if sec_till_end > sec_till_start:
+            if sec_till_start < sec_till_end:
                 # we are not inside the schedule
+                schedule_completed_until[i] = local_timestamp + sec_till_start
                 continue
 
             # weekday of current schedule start time, monday is 0, sunday is 6
             weekday = ((local_timestamp + sec_till_start) // 86400 + 2) % 7
             if not s['day_mask'] & (1 << weekday):
+                schedule_completed_until[i] = local_timestamp + sec_till_start
                 continue
 
-            if (config['options']['irrigation_factor']['reference_schedule_id'] == i and
-                irrigation_factor_expiration <= local_timestamp + sec_till_end and
-                (soil_moisture := get_soil_moisture_milli()) is not None):
-                # it's the reference_schedule_id and irrigation_factor is about to expire, we might need to adjust the irrigation factor
-                if schedule_status & (1 << i):
-                    # reference_schedule_id is active, check if we should stop
-                    if soil_moisture >= config['options']['irrigation_factor']['soil_moisture_wet']:
-                        irrigation_factor = (local_timestamp - s['start_sec']) % 86400 / s['duration_sec']
-                        irrigation_factor_expiration = local_timestamp + sec_till_start + duration_sec
-                else:
-                    # reference_schedule_id is about to start, is it dry enough?
-                    if soil_moisture >= config['options']['irrigation_factor']['soil_moisture_dry']:
-                        irrigation_factor = 0
-                        irrigation_factor_expiration = local_timestamp + sec_till_start + duration_sec
+            z = config["zones"][s['zone_id']]
 
-            if s['enable_irrigation_factor']:
-                duration_sec *= irrigation_factor
+            if (s['enable_soil_moisture_sensor'] and
+                (soil_moisture := get_soil_moisture_milli(s['zone_id'])) is not None):
+                # soil_moisture value needs to be taken into account
+                if schedule_status & (1 << i):
+                    # schedule is active, check if we should stop
+                    if soil_moisture >= z['soil_moisture_wet']:
+                        schedule_completed_until[i] = local_timestamp + (86400 if sec_till_start==0 else sec_till_start)
+                        continue
+                else:
+                    # rschedule is about to start, is it dry enough?
+                    if soil_moisture >= z['soil_moisture_dry']:
+                        schedule_completed_until[i] = local_timestamp + (86400 if sec_till_start==0 else sec_till_start)
+                        continue
+
+            if 0 <= z['irrigation_factor_override']:
+                duration_sec *= z['irrigation_factor_override']
                 # check if we are still inside the schedule (updated duration)
                 sec_till_end = (sec_till_start + duration_sec) % 86400
-                if sec_till_end >= sec_till_start:
+                if sec_till_end > sec_till_start:
                     continue
 
             # we should irrigate, set the valve status
@@ -222,6 +220,7 @@ async def schedule_irrigation():
 #########################
 def apply_config(new_config: dict) -> None:
     global config
+    global schedule_completed_until
     global micropython_to_localtime
     global heartbeat_pin_id
 
@@ -233,19 +232,25 @@ def apply_config(new_config: dict) -> None:
             "active_is_high": bool(z.get('active_is_high', True)),
             "on_pin": int(z.get('on_pin', -1)),
             "off_pin": int(z.get('off_pin', -1)),
+            # SoilMoistureSensor
+            "irrigation_factor_override": float(z.get('irrigation_factor_override', -1)),
+            "soil_moisture_dry": int(z.get('soil_moisture_dry', 300)),
+            "soil_moisture_wet": int(z.get('soil_moisture_wet', 700)),
+            "adc_pin_id": int(z.get('adc_pin_id', 12)),
+            "power_pin_id": int(z.get('power_pin_id', 13)),
         })
     for s in new_config.get('schedules', []):
         normalized_config['schedules'].append({
+            "enabled": bool(s.get('enabled', True)),
             "zone_id": int(s['zone_id']),
             "start_sec": int(s['start_sec']),
             "duration_sec": int(s['duration_sec']),
-            "enable_irrigation_factor": bool(s['enable_irrigation_factor']),
-            "enabled": bool(s['enabled']),
+            "enable_soil_moisture_sensor": bool(s.get('enable_soil_moisture_sensor', True)),
             "day_mask": int(s.get('day_mask', 0b1111111)),
             "expiry": int(s.get('expiry', 0)),
         })
     bo = new_config.get('options', {})
-    for key in ['wifi', 'irrigation_factor', 'monitoring', 'soil_moisture_sensor', 'settings']:
+    for key in ['wifi', 'monitoring', 'soil_moisture_sensor', 'settings']:
         bo.setdefault(key, {})
     normalized_config['options'] = {
         "wifi": {
@@ -253,19 +258,11 @@ def apply_config(new_config: dict) -> None:
             "password": str(bo['wifi'].get('password', '')),
             "hostname": str(bo['wifi'].get('hostname', 'rsi-'+''.join([f'{b:02x}' for b in wlan.config('mac')[3:6]]))),
         },
-        "irrigation_factor": {
-            "override": float(bo['irrigation_factor'].get('override', -1)),
-            "reference_schedule_id": int(bo['irrigation_factor'].get('reference_schedule_id', -1)),
-            "soil_moisture_dry": int(bo['irrigation_factor'].get('soil_moisture_dry', 300)),
-            "soil_moisture_wet": int(bo['irrigation_factor'].get('soil_moisture_wet', 700)),
-        },
         "monitoring": {
             "thingsspeak_apikey": str(bo['monitoring'].get('thingsspeak_apikey', '')),
             "send_interval_sec": int(bo['monitoring'].get('send_interval_sec', 300)),
         },
         "soil_moisture_sensor": {
-            "adc_pin_id": int(bo['soil_moisture_sensor'].get('adc_pin_id', 12)),
-            "power_pin_id": int(bo['soil_moisture_sensor'].get('power_pin_id', 13)),
             "high_is_dry": bool(bo['soil_moisture_sensor'].get('high_is_dry', True)),
             "sample_count": int(bo['soil_moisture_sensor'].get('sample_count', 3)),
         },
@@ -278,40 +275,37 @@ def apply_config(new_config: dict) -> None:
         },
     }
 
-    reference_schedule_id = normalized_config['options']['irrigation_factor']['reference_schedule_id']
-    if reference_schedule_id >= 0:
-        normalized_config['schedules'][reference_schedule_id]['enable_irrigation_factor'] = True
-    # print(f"apply_config({new_config})\n    normalized_config={normalized_config}")
-
     # if zones changed, turn off all valves
     if config and config.get('zones', []) != normalized_config['zones']:
         apply_valves(0)
 
+    # print(f"apply_config({new_config})\n    normalized_config={normalized_config}")
     config = normalized_config
 
     micropython_to_localtime = MICROPYTHON_TO_TIMESTAMP + round(config['options']['settings']['timezone_offset'] * 3600)
     heartbeat_pin_id = config['options']['settings']['heartbeat_pin_id']
+    schedule_completed_until = [0] * len(config['schedules'])
 
-def read_soil_moisture_raw() -> int:
-    soil_moisture_config = config['options']['soil_moisture_sensor']
+def read_soil_moisture_raw(zone_id: int) -> int:
+    soil_moisture_config = config["zones"][zone_id]
     if 0 > soil_moisture_config['adc_pin_id']:
         return None
-    if soil_moisture_config['power_pin_id'] >= 0:
+    if 0 <= soil_moisture_config['power_pin_id']:
         Pin(soil_moisture_config['power_pin_id'], Pin.OUT).value(1)
         time.sleep(0.010)
     # https://docs.micropython.org/en/latest/esp32/quickref.html#adc-analog-to-digital-conversion
     adc = ADC(soil_moisture_config['adc_pin_id'], atten=ADC.ATTN_11DB)
     raw_reading = 0
-    for i in range(soil_moisture_config['sample_count']):
+    for i in range(config['options']['soil_moisture_sensor']['sample_count']):
         raw_reading += adc.read_u16()
     raw_reading //= i+1
     if soil_moisture_config['power_pin_id'] >= 0:
         Pin(soil_moisture_config['power_pin_id'], Pin.IN)
     return raw_reading
 
-def get_soil_moisture_milli(raw_reading: int = None) -> int:
+def get_soil_moisture_milli(zone_id: int, raw_reading: int = None) -> int:
     if raw_reading is None:
-        raw_reading = read_soil_moisture_raw()
+        raw_reading = read_soil_moisture_raw(zone_id)
     if raw_reading is None:
         return None
     # raw range of [1..65534] is linarly mapped onto [1..999], 0->0, 65535->1000
@@ -341,7 +335,7 @@ async def serve_file(filename: str, writer) -> None:
     try:
         start_time = time.ticks_ms()
         buf = memoryview(bytearray(1024))
-        with open(filename, 'r') as f:
+        with open(filename, 'r', encoding='utf-8') as f:
             while length := f.readinto(buf):
                 writer.write(buf[:length])
         print(f'served {time.ticks_ms() - start_time}ms')
@@ -419,20 +413,18 @@ async def handle_request(reader, writer):
             filename = path[6:]
             content_type = 'text/html'
         elif method == 'GET' and path == '/status':
-            # tt = time.gmtime()
-            soil_moisture_raw = read_soil_moisture_raw()
-            soil_moisture_milli = get_soil_moisture_milli(soil_moisture_raw)
+            now = get_local_timestamp()
             response = ujson.dumps({
-                "local_timestamp": get_local_timestamp(),
-                "soil_moisture_milli": soil_moisture_milli,
-                "soil_moisture_raw": soil_moisture_raw,
+                "local_timestamp": now,
+                "soil_moisture": { z['name']: get_soil_moisture_milli(i) for i, z in enumerate(config['zones']) if z['adc_pin_id'] >= 0 and not z['master'] },
                 "gc.mem_alloc": mem_alloc(),
                 "gc.mem_free": mem_free(),
                 "valve_status": f"{valve_status:08b}",
                 "schedule_status": f"{schedule_status:08b}",
-                "mcu_temperature": esp32.mcu_temperature(),
-                "irrigation_factor": irrigation_factor,
+                "mcu_temperature": mcu_temperature(),
+                "schedule_completed_until": [max(t-now, -1) for t in schedule_completed_until],
                 "hostname": config['options']['wifi']['hostname'],
+                "mac_address": ':'.join([f'{b:02x}' for b in wlan.config('mac')])
             })
         elif wifi_setup_mode and method == 'GET' and path == '/setup':
             print(f"Setup: query_params={query_params}")
@@ -464,14 +456,13 @@ async def handle_request(reader, writer):
     await writer.wait_closed()
 
 async def send_metrics():
-    global irrigation_factor
-
     while True:
         try:
-            # TODO: add micropython.mem_info()
+            metrics = [mcu_temperature(), valve_status] + [get_soil_moisture_milli(i) for i, z in enumerate(config['zones']) if z['adc_pin_id'] >= 0 and not z['master'] ]
+            # mem_alloc(), mcu_temperature()
             if 'thingsspeak_apikey' in config['options']['monitoring']:
-                # &field4={gc.mem_alloc()}&field5={esp32.mcu_temperature()}
-                requests.get(f"http://api.thingspeak.com/update?api_key={config['options']['monitoring']['thingsspeak_apikey']}&field1={valve_status}&field2={get_soil_moisture_milli()}&field3={irrigation_factor}", timeout=10).close()
+                params = {"api_key": config['options']['monitoring']['thingsspeak_apikey']} | {f'field{i+1}': m for i, m in enumerate(metrics)}
+                requests.get("http://api.thingspeak.com/update?" + '&'.join([f'{k}={v}' for k, v in params.items()]), timeout=10).close()
         except Exception as e:
             print(f"Error sending metrics: {e}")
         finally:

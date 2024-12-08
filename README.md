@@ -68,7 +68,9 @@ Depends on the valve/pump used:
 Depends on the valve/pump used. The controller may be powered by a USB charger or VBUS pin.
 Note: The H-Bridge L298N has an onboard 5V regulator which can be used to power the controller via the VBUS pin.
 
-## [Soil Moisture Sensor](https://www.google.com/search?q=soil+moisture+sensor) (Optional)
+## Soil Moisture Sensor (Optional)
+1. Build one based on a [10K ohm resistor](https://www.instructables.com/DIY-SOIL-MOISTURE-SENSOR-CHEAP-YET-ACCURATE-/)
+1. Buy a [LM393](https://www.google.com/search?q=LM393) module
 
 ## Master Relay (Optional)
 1. Saves power when waiting for the next watering cycle
@@ -145,7 +147,6 @@ curl ${URL}/status | jq
 ```
 
 # TODO
-1. Make moisture sensor a property of zone
 1. Implement pause_hours
 1. Manual watering
 1.
