@@ -145,37 +145,45 @@ async def schedule_irrigation():
         new_schedule_status = 0
         for i, s in enumerate(config["schedules"]):
             # print(f"@{time.time()} checking schedule={s}")
-            if schedule_completed_until[i] > local_timestamp:
+            if local_timestamp < schedule_completed_until[i]:
                 continue
 
+            z = config["zones"][s['zone_id']]
+
+            # follwing checks disabled the schedule until config change
             if not config['options']['settings']['enable_irrigation_schedule']:
+                schedule_completed_until[i] = sys.maxsize
                 continue
 
             if not s['enabled']:
+                schedule_completed_until[i] = sys.maxsize
                 continue
 
-            if s['duration_sec'] <= 0:
+            duration_sec = s['duration_sec']
+            if 0 <= z['irrigation_factor_override']:
+                duration_sec *= z['irrigation_factor_override']
+            duration_sec = min(round(duration_sec), 86400)
+            if duration_sec <= 0:
+                schedule_completed_until[i] = sys.maxsize
                 continue
 
             if s['expiry'] and local_timestamp > s['expiry']:
+                schedule_completed_until[i] = sys.maxsize
                 continue
-        
 
             sec_till_start = (86400 + s['start_sec'] - local_timestamp % 86400) % 86400
-            duration_sec = round(s['duration_sec'])
             sec_till_end = (sec_till_start + duration_sec) % 86400
+
             if sec_till_start < sec_till_end:
-                # we are not inside the schedule
-                schedule_completed_until[i] = local_timestamp + sec_till_start
+                # we are outside the schedule window = (start, end], skip till sec_till_start==86399
+                schedule_completed_until[i] = local_timestamp + sec_till_start + 1
                 continue
 
             # weekday of current schedule start time, monday is 0, sunday is 6
             weekday = ((local_timestamp + sec_till_start) // 86400 + 2) % 7
             if not s['day_mask'] & (1 << weekday):
-                schedule_completed_until[i] = local_timestamp + sec_till_start
+                schedule_completed_until[i] = local_timestamp + sec_till_start + 1
                 continue
-
-            z = config["zones"][s['zone_id']]
 
             if (s['enable_soil_moisture_sensor'] and
                 (soil_moisture := get_soil_moisture_milli(s['zone_id'])) is not None):
@@ -183,20 +191,13 @@ async def schedule_irrigation():
                 if schedule_status & (1 << i):
                     # schedule is active, check if we should stop
                     if soil_moisture >= z['soil_moisture_wet']:
-                        schedule_completed_until[i] = local_timestamp + (86400 if sec_till_start==0 else sec_till_start)
+                        schedule_completed_until[i] = local_timestamp + sec_till_start + 1
                         continue
                 else:
-                    # rschedule is about to start, is it dry enough?
+                    # schedule is about to start, is it dry enough?
                     if soil_moisture >= z['soil_moisture_dry']:
-                        schedule_completed_until[i] = local_timestamp + (86400 if sec_till_start==0 else sec_till_start)
+                        schedule_completed_until[i] = local_timestamp + sec_till_start + 1
                         continue
-
-            if 0 <= z['irrigation_factor_override']:
-                duration_sec *= z['irrigation_factor_override']
-                # check if we are still inside the schedule (updated duration)
-                sec_till_end = (sec_till_start + duration_sec) % 86400
-                if sec_till_end > sec_till_start:
-                    continue
 
             # we should irrigate, set the valve status
             valve_desired |= (1 << s['zone_id'])
