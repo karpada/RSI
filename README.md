@@ -70,6 +70,8 @@ Note: The H-Bridge L298N has an onboard 5V regulator which can be used to power 
 
 ## Soil Moisture Sensor (Optional)
 1. Build one based on a [10K ohm resistor](https://www.instructables.com/DIY-SOIL-MOISTURE-SENSOR-CHEAP-YET-ACCURATE-/)
+    * Ground and VCC can be shared among multiple sensors.
+    * You can use any type of probe, such as a nail or stainless steel wire.
 1. Buy a [LM393](https://www.google.com/search?q=LM393) module
 
 ## Master Relay (Optional)
@@ -147,6 +149,7 @@ curl ${URL}/status | jq
 ```
 
 # TODO
-1. Implement pause_hours
-1. Manual watering
+1. Implement pause for x hours hours
+1. Manual watering (auto delete schedule)
+1. Time sync by temprature sensor
 1.

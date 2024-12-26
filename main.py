@@ -1,5 +1,5 @@
 import sys
-from collections import namedtuple
+from collections import namedtuple, deque
 from gc import mem_alloc, mem_free
 import network
 import utime as time
@@ -13,7 +13,7 @@ from uos import rename, stat
 
 # Global variables
 MICROPYTHON_TO_TIMESTAMP: int = 946684800 # 2000-1970 --> 3155673600 - 2208988800
-micropython_to_localtime: int = None
+micropython_to_localtime: int = 0
 wlan: network.WLAN = network.WLAN(network.STA_IF)
 config: dict = None
 valve_status: int = 0
@@ -22,9 +22,29 @@ heartbeat_pin_id: int = -1
 wifi_setup_mode = False
 schedule_completed_until = []
 
+# logging
+def get_local_timestamp() -> int:
+    return time.time()+micropython_to_localtime
+
+LogLine = namedtuple('LogLine', ['timestamp', 'level', 'zone_id', 'schedule_id', 'message'])
+LOG = deque([], 25)
+def log(level:int, zone_id: int, schedule_id: int, message: str) -> None:
+    ts=get_local_timestamp()
+    print(f"@{ts} z{zone_id} s{schedule_id} {message}")
+    if config and level < config['options']['log']['level']:
+        return
+    LOG.append(LogLine(ts, level, zone_id, schedule_id, message))
+        
+def debug(zone_id: int, schedule_id: int, message: str) -> None:
+    log(10, zone_id, schedule_id, message)        
+def info(zone_id: int, schedule_id: int, message: str) -> None:
+    log(20, zone_id, schedule_id, message)
+def warn(zone_id: int, schedule_id: int, message: str) -> None:
+    log(30, zone_id, schedule_id, message)
+
 # Persistent storage functions
 def save_as_json(filename: str, data: dict) -> None:
-    print(f"Saving data to {filename}")
+    info(None, None, f"Saving data to {filename}")
     with open(filename, 'w', encoding='utf-8') as f:
         ujson.dump(data, f)
 
@@ -41,7 +61,7 @@ async def connect_wifi() -> None:
             return
         network.hostname(config['options']['wifi']['hostname'])
         wlan.active(True)
-        print(f'@{time.time()} wifi connecting.', end='')
+        info(None, None, 'Wifi connecting...')
         wlan.connect(config['options']['wifi']['ssid'], config['options']['wifi']['password'])
         for _ in range(15):
             if wlan.isconnected():
@@ -49,13 +69,13 @@ async def connect_wifi() -> None:
             await asyncio.sleep(1)
             print('.', end='')
         if wlan.isconnected():
-            print(f"connected, ip = {wlan.ifconfig()[0]}, hostname={config['options']['wifi']['hostname']}")
+            info(None, None, f"Connected, ip = {wlan.ifconfig()[0]}, hostname={config['options']['wifi']['hostname']}")
             return
         wlan.active(False)
-        print('network connection failed, retrying in 60 seconds')
+        warn(None, None, 'network connection failed, retrying in 60 seconds')
     except Exception as e:
         wlan.active(False)
-        print(f"Exception while connecting to wifi: {e}")
+        warn(None, None, f"Exception while connecting to wifi: {e}")
 
 async def keep_wifi_connected():
     while True:
@@ -65,16 +85,13 @@ async def keep_wifi_connected():
         connect_wifi()
 
 # Time functions
-def get_local_timestamp() -> int:
-    return time.time()+micropython_to_localtime
-
 async def sync_ntp() -> bool:
     try:
         settime()
-        print(f'@{time.time()} NTP synced, UTC time={time.time()+MICROPYTHON_TO_TIMESTAMP} Local time(GMT{config["options"]["settings"]["timezone_offset"]:+})={time.time()+micropython_to_localtime}')
+        info(None, None, f'@{time.time()} NTP synced, UTC time={time.time()+MICROPYTHON_TO_TIMESTAMP} Local time(GMT{config["options"]["settings"]["timezone_offset"]:+})={time.time()+micropython_to_localtime}')
         return True
     except:
-        print(f'@{time.time()} Error syncing time, current UTC timestamp={time.time()+MICROPYTHON_TO_TIMESTAMP}')
+        warn(None, None, f'@{time.time()} Error syncing time, current UTC timestamp={time.time()+MICROPYTHON_TO_TIMESTAMP}')
         return False
 
 async def periodic_ntp_sync():
@@ -86,15 +103,15 @@ async def periodic_ntp_sync():
 # Watering control functions
 def control_watering(zone_id: int, start: bool) -> None:
     if zone_id < 0 or zone_id >= len(config["zones"]):
-        print(f"Zone {zone_id} not found")
+        warn(zone_id, None, 'invalid zone_id')
         return
     zone = config["zones"][zone_id]
     pin_id = zone['on_pin'] if start else zone['off_pin']
     if pin_id < 0:
-        print("NOP pin_id<0")
+        info(zone_id, None, f"Zones[{zone_id}]='{zone['name']}' (off_pin={zone['off_pin']}, on_pin={zone['on_pin']}) will NOP on {'open' if start else 'close'} because pin_id < 0")
         return
     pin_value = 1 if zone['active_is_high'] else 0
-    print(f"Zones[{zone_id}]='{zone['name']}' (off_pin={zone['off_pin']}, on_pin={zone['on_pin']}) will be set {'open' if start else 'close'} using pin_id({pin_id}).value({pin_value})")
+    info(zone_id, None, f"Zones[{zone_id}]='{zone['name']}' (off_pin={zone['off_pin']}, on_pin={zone['on_pin']}) will be set {'open' if start else 'close'} using pin_id({pin_id}).value({pin_value})")
     if zone['on_pin'] == zone['off_pin']:
         # leave the pin in the state
         if start:
@@ -112,7 +129,7 @@ async def apply_valves(new_status: int) -> None:
     if new_status == valve_status:
         return
 
-    print(f"@{time.time()} apply_valves({new_status:08b}), valve_status={valve_status:08b}")
+    debug(None, None, f"apply_valves({new_status:08b}), valve_status={valve_status:08b}")
     relay_pin_id = config['options']['settings']['relay_pin_id']
     if relay_pin_id >= 0:
         relay_value = 1 if config['options']['settings']['relay_active_is_high'] else 0
@@ -120,8 +137,8 @@ async def apply_valves(new_status: int) -> None:
         await asyncio.sleep(0.250) # wait for H-Bridges to power up
 
     for i in range(len(config['zones'])):
-        if (valve_status^new_status)>>i & 1:
-            control_watering(i, new_status>>i & 1)
+        if (valve_status^new_status) & (1<<i):
+            control_watering(i, bool(new_status & (1<<i)))
             await asyncio.sleep(0.050) # wait to settle down
     valve_status = new_status
 
@@ -144,19 +161,22 @@ async def schedule_irrigation():
         valve_desired = 0
         new_schedule_status = 0
         for i, s in enumerate(config["schedules"]):
-            # print(f"@{time.time()} checking schedule={s}")
+            # debug(None, i, "checking schedule")
             if local_timestamp < schedule_completed_until[i]:
                 continue
 
-            z = config["zones"][s['zone_id']]
+            zone_id = s['zone_id']
+            z = config["zones"][zone_id]
 
             # follwing checks disabled the schedule until config change
             if not config['options']['settings']['enable_irrigation_schedule']:
                 schedule_completed_until[i] = sys.maxsize
+                debug(zone_id, i, f"Schedule #{i} zone[{zone_id}]='{z['name']}' disabled because all schedules is disabled")
                 continue
 
             if not s['enabled']:
                 schedule_completed_until[i] = sys.maxsize
+                debug(zone_id, i, f"Schedule #{i} zone[{zone_id}]='{z['name']}' disabled because schedule is disabled")
                 continue
 
             duration_sec = s['duration_sec']
@@ -165,10 +185,12 @@ async def schedule_irrigation():
             duration_sec = min(round(duration_sec), 86400)
             if duration_sec <= 0:
                 schedule_completed_until[i] = sys.maxsize
+                debug(zone_id, i, f"Schedule #{i} zone[{zone_id}]='{z['name']}' disabled because duration_sec is zero")
                 continue
 
             if s['expiry'] and local_timestamp > s['expiry']:
                 schedule_completed_until[i] = sys.maxsize
+                debug(zone_id, i, f"Schedule #{i} zone[{zone_id}]='{z['name']}' disabled because schedule expired")
                 continue
 
             sec_till_start = (86400 + s['start_sec'] - local_timestamp % 86400) % 86400
@@ -177,12 +199,14 @@ async def schedule_irrigation():
             if sec_till_start < sec_till_end:
                 # we are outside the schedule window = (start, end], skip till sec_till_start==86399
                 schedule_completed_until[i] = local_timestamp + sec_till_start + 1
+                debug(zone_id, i, f"Schedule #{i} zone[{zone_id}]='{z['name']}' suspended until next start: {schedule_completed_until[i]}")
                 continue
 
             # weekday of current schedule start time, monday is 0, sunday is 6
             weekday = ((local_timestamp + sec_till_start) // 86400 + 2) % 7
             if not s['day_mask'] & (1 << weekday):
                 schedule_completed_until[i] = local_timestamp + sec_till_start + 1
+                debug(zone_id, i, f"Schedule #{i} zone[{zone_id}]='{z['name']}' suspended until next start {schedule_completed_until[i]} because of day_mask={s['day_mask']:07b} weekday={weekday}")
                 continue
 
             if (s['enable_soil_moisture_sensor'] and
@@ -192,24 +216,29 @@ async def schedule_irrigation():
                     # schedule is active, check if we should stop
                     if soil_moisture >= z['soil_moisture_wet']:
                         schedule_completed_until[i] = local_timestamp + sec_till_start + 1
+                        info(zone_id, i, f"Schedule #{i} zone[{zone_id}]='{z['name']}' stopped and suspended until next start {schedule_completed_until[i]} because soil_moisture={soil_moisture} is wet")
                         continue
                 else:
                     # schedule is about to start, is it dry enough?
                     if soil_moisture >= z['soil_moisture_dry']:
                         schedule_completed_until[i] = local_timestamp + sec_till_start + 1
+                        info(zone_id, i, f"Schedule #{i} zone[{zone_id}]='{z['name']}' won't start and suspended until next start {schedule_completed_until[i]} because soil_moisture={soil_moisture} is not dry enough")
                         continue
 
             # we should irrigate, set the valve status
             valve_desired |= (1 << s['zone_id'])
             new_schedule_status |= (1 << i)
-            # print(f"@{time.time()} valve_desired={valve_desired:08b} for schedule={s}")
+            # debug(zone_id, i, f"valve_desired={valve_desired:08b} for schedule={s}")
 
-        # print(f"@{time.time()} valve_desired={valve_desired:08b}")
+        # debug(None, None, f"valve_desired={valve_desired:08b}")
         if valve_desired > 0:
             for i, zone in enumerate(config["zones"]):
                 if zone['master']:
                     valve_desired |= (1 << i)
 
+        for i, s in enumerate(config["schedules"]):
+            if (schedule_status ^ new_schedule_status) & (1 << i):
+                info(s['zone_id'], i, f"Schedule #{i} zone[{zone_id}]='{z['name']}' {'started' if new_schedule_status & (1 << i) else 'ended'} for zone {s['zone_id']} ({z['name']})")
         await apply_valves(valve_desired)
         schedule_status = new_schedule_status
         if heartbeat_pin_id > 0:
@@ -224,7 +253,9 @@ def apply_config(new_config: dict) -> None:
     global schedule_completed_until
     global micropython_to_localtime
     global heartbeat_pin_id
+    global LOG
 
+    info(None, None, f"Applying new config...")
     normalized_config = {"zones": [], "schedules": [], "options": {}}
     for i, z in enumerate(new_config.get('zones', [])):
         normalized_config['zones'].append({
@@ -274,18 +305,23 @@ def apply_config(new_config: dict) -> None:
             "heartbeat_pin_id": int(bo['settings'].get('heartbeat_pin_id', heartbeat_pin_id)),
             "relay_active_is_high": bool(bo['settings'].get('relay_active_is_high', False)),
         },
+        "log": {
+            "level": int(bo.get('level', 20)),
+            "max_lines": int(bo.get('max_lines', 50)),
+        }
     }
 
     # if zones changed, turn off all valves
     if config and config.get('zones', []) != normalized_config['zones']:
         apply_valves(0)
 
-    # print(f"apply_config({new_config})\n    normalized_config={normalized_config}")
+    # log(None, None, f"apply_config({new_config})\n    normalized_config={normalized_config}")
     config = normalized_config
 
     micropython_to_localtime = MICROPYTHON_TO_TIMESTAMP + round(config['options']['settings']['timezone_offset'] * 3600)
     heartbeat_pin_id = config['options']['settings']['heartbeat_pin_id']
     schedule_completed_until = [0] * len(config['schedules'])
+    LOG = deque([l for l in LOG if l.level >= config['options']['log']['level']], config['options']['log']['max_lines'])
 
 def read_soil_moisture_raw(zone_id: int) -> int:
     soil_moisture_config = config["zones"][zone_id]
@@ -327,9 +363,9 @@ async def store_file(reader, length: int, filename: str) -> None:
                 f.write(buf[:chunk_length])
                 length -= chunk_length
         rename('upload.tmp', filename)
-        print(f'stored {filename} (stat={stat(filename)}) in {time.ticks_ms() - start_time}ms')
+        info(None, None, f'Stored [{filename}] (stat={stat(filename)}) in {time.ticks_ms() - start_time}ms')
     except Exception as e:
-        print(f"Error storing [{filename}]: {e}")
+        warn(None, None, f"Error storing [{filename}]: {e}")
         raise
 
 async def serve_file(filename: str, writer) -> None:
@@ -339,9 +375,9 @@ async def serve_file(filename: str, writer) -> None:
         with open(filename, 'r', encoding='utf-8') as f:
             while length := f.readinto(buf):
                 writer.write(buf[:length])
-        print(f'served {time.ticks_ms() - start_time}ms')
+        info(None, None, f'Served [{filename}] in {time.ticks_ms() - start_time}ms')
     except Exception as e:
-        print(f"Error serving [{filename}]: {e}")
+        warn(None, None, f"Error serving [{filename}]: {e}")
         raise
 
 async def read_http_headers(reader) -> dict:
@@ -384,7 +420,7 @@ async def handle_request(reader, writer):
         headers = await read_http_headers(reader)
         content_length = int(headers.get('content-length', '0'))
 
-        print(f"@{time.time()} Request: {method:4} {path:14} query_params={query_params}, (content_length={content_length})")  #     headers={headers}")
+        debug(None, None, f"Request: {method:4} {path:14} query_params={query_params}, (content_length={content_length})")  #     headers={headers}")
 
         response = "Should not happen"
         if method == 'GET' and path == '/':
@@ -399,16 +435,16 @@ async def handle_request(reader, writer):
         elif method == 'POST' and path == '/config':
             body = ujson.loads((await reader.read(content_length)).decode()) if content_length > 0 else None
             # restore backup: jq . irrigation-config.json | curl -H "Content-Type: application/json" -X POST --data-binary @- http://192.168.68.ESP/config
-            print(f"applying new config = {body}")
+            info(None, None, f"applying new config = {body}")
             apply_config(body)
             response = ujson.dumps(config)
             save_as_json('config.json', config)
         elif method == 'POST' and path.startswith('/file/'):
             # curl -X POST --data-binary @main.py http://192.168.68.114/file/main.py\?reboot\=1
-            print(f"Updating {path[6:]}")
+            info(None, None, f"Updating {path[6:]}")
             await store_file(reader, content_length, path[6:])
             if '1' == query_params.get('reboot', '0'):
-                print("Rebooting...")
+                info(None, None, "Rebooting...")
                 reset()
             response = ujson.dumps({
                 "method": method,
@@ -432,10 +468,19 @@ async def handle_request(reader, writer):
                 "hostname": config['options']['wifi']['hostname'],
                 "mac_address": ':'.join([f'{b:02x}' for b in wlan.config('mac')])
             })
+        elif method == 'GET' and path == '/log':
+            now = get_local_timestamp()
+            response = ujson.dumps({
+                "local_timestamp": now,
+                "log": [{"timestamp": l.timestamp, "level": l.level, "zone_id": l.zone_id, "schedule_id": l.schedule_id, "message": l.message} for l in LOG]
+            })
+        elif method == 'GET' and path == '/logtsv':
+            now = get_local_timestamp()
+            response = '\n'.join([f"{l.timestamp}\t{l.level}\t{l.zone_id}\t{l.schedule_id}\t{l.message}" for l in LOG])
         elif wifi_setup_mode and method == 'GET' and path == '/setup':
-            print(f"Setup: query_params={query_params}")
+            info(None, None, f"Setup: query_params={query_params}")
             save_as_json('config.json', {"options": { "wifi": query_params }})
-            print("Restarting...")
+            info(None, None, "Restarting...")
             await asyncio.sleep(0.1)
             if heartbeat_pin_id > 0:
                 Pin(heartbeat_pin_id, Pin.IN)
@@ -445,7 +490,7 @@ async def handle_request(reader, writer):
             status_code = 404
 
     except Exception as e:
-        print(f"Error handling request: {e}")
+        warn(None, None, f"Error handling request: {e}")
         writer.write(f'HTTP/1.0 500 {get_status_message(500)}\r\n')
         await writer.drain()
         writer.close()
@@ -470,7 +515,7 @@ async def send_metrics():
                 params = {"api_key": config['options']['monitoring']['thingsspeak_apikey']} | {f'field{i+1}': m for i, m in enumerate(metrics)}
                 requests.get("http://api.thingspeak.com/update?" + '&'.join([f'{k}={v}' for k, v in params.items()]), timeout=10).close()
         except Exception as e:
-            print(f"Error sending metrics: {e}")
+            warn(None, None, f"Error sending metrics: {e}")
         finally:
             await asyncio.sleep(config['options']['monitoring']['send_interval_sec'])
 
@@ -489,7 +534,7 @@ async def wait_for_wifi_setup(button_pin_id: int, wait_time: int) -> None:
         ap.active(True)
         ap.config(essid='irrigation-esp32')
         server = await asyncio.start_server(handle_request, "0.0.0.0", 80)
-        print('Server listening on port 80')
+        info(None, None, 'Server listening on port 80')
         await server.wait_closed()
 
 async def main():
@@ -497,7 +542,7 @@ async def main():
     global heartbeat_pin_id
 
     if sys.maxsize>>30 == 0:
-        print(">>> We have less than 31 bits :(")
+        warn(None, None, ">>> We have less than 31 bits :(")
 
     BoardBootstrap = namedtuple('BoardBootstrap', ['name', 'button_pin_id', 'heartbeat_pin_id'])
     for bootstrap in [
@@ -507,7 +552,7 @@ async def main():
     ]:
         if bootstrap.name in sys.implementation._machine:
             break
-    print(f"Starting irrigation-esp32 on [{sys.implementation._machine}] detected as {bootstrap}")
+    info(None, None, f"Starting irrigation-esp32 on [{sys.implementation._machine}] detected as {bootstrap}")
     heartbeat_pin_id = bootstrap.heartbeat_pin_id
 
     freq(80_000_000)
@@ -519,20 +564,21 @@ async def main():
 
     # set valve_status = 0b1111...1 so that the first apply_valves will turn off all valves
     valve_status = (1<<len(config['zones']))-1
+    info(None, None, "Closing all valves...")
     await apply_valves(0)
 
     await connect_wifi()
     await sync_ntp()
     # if not wlan.isconnected():
         # we can go to wifi setup mode
-        # print("WiFi connection failed on startup, starting irrigation scheduler, will retry reconnecting in background")
+        # warn(None, None, "WiFi connection failed on startup, starting irrigation scheduler, will retry reconnecting in background")
     asyncio.create_task(keep_wifi_connected())
     asyncio.create_task(periodic_ntp_sync())
     asyncio.create_task(send_metrics())
     asyncio.create_task(schedule_irrigation())
 
     server = await asyncio.start_server(handle_request, "0.0.0.0", 80)
-    print('Server listening on port 80')
+    info(None, None, 'Server listening on port 80')
     await server.wait_closed()
 
 if __name__ == "__main__":
