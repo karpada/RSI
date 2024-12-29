@@ -372,7 +372,12 @@ async def handle_request(reader, writer):
     filename = None
 
     try:
-        method, path, _ = (await reader.readline()).decode().lstrip().split(' ')
+        req = (await reader.readline()).decode().lstrip()
+        if not req:
+            writer.close()
+            await writer.wait_closed()
+            return
+        method, path, _ = req.split(' ')
         path, query_params = path.split('?') if '?' in path else (path, None)
         query_params = dict([param.replace('+', ' ').split('=') for param in query_params.split('&')]) if query_params else {}
 
