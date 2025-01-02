@@ -88,7 +88,7 @@ async def keep_wifi_connected():
 async def sync_ntp() -> bool:
     try:
         settime()
-        info(None, None, f'@{time.time()} NTP synced, UTC time={time.time()+MICROPYTHON_TO_TIMESTAMP} Local time(GMT{config["options"]["settings"]["timezone_offset"]:+})={time.time()+micropython_to_localtime}')
+        debug(None, None, f'@{time.time()} NTP synced, UTC time={time.time()+MICROPYTHON_TO_TIMESTAMP} Local time(GMT{config["options"]["settings"]["timezone_offset"]:+})={time.time()+micropython_to_localtime}')
         return True
     except:
         warn(None, None, f'@{time.time()} Error syncing time, current UTC timestamp={time.time()+MICROPYTHON_TO_TIMESTAMP}')
@@ -96,7 +96,7 @@ async def sync_ntp() -> bool:
 
 async def periodic_ntp_sync():
     while True:
-        await asyncio.sleep(24 * 60 * 60)  # 24 hours, assuming we are already synced
+        await asyncio.sleep(4 * 24 * 60 * 60)  # resync every 4 days
         while not await sync_ntp():
             await asyncio.sleep(10) # 10 seconds
 
@@ -108,21 +108,22 @@ def control_watering(zone_id: int, start: bool) -> None:
     zone = config["zones"][zone_id]
     pin_id = zone['on_pin'] if start else zone['off_pin']
     if pin_id < 0:
-        info(zone_id, None, f"Zones[{zone_id}]='{zone['name']}' (off_pin={zone['off_pin']}, on_pin={zone['on_pin']}) will NOP on {'open' if start else 'close'} because pin_id < 0")
+        info(zone_id, None, f"Zone[{zone_id}]='{zone['name']}' (off_pin={zone['off_pin']}, on_pin={zone['on_pin']}) will NOP on {'open' if start else 'close'} because pin_id < 0")
         return
     pin_value = 1 if zone['active_is_high'] else 0
-    info(zone_id, None, f"Zones[{zone_id}]='{zone['name']}' (off_pin={zone['off_pin']}, on_pin={zone['on_pin']}) will be set {'open' if start else 'close'} using pin_id({pin_id}).value({pin_value})")
-    if zone['on_pin'] == zone['off_pin']:
+    pulse_mode = zone['on_pin'] != zone['off_pin']
+    debug(zone_id, None, f"Zone[{zone_id}]='{zone['name']}' (off_pin={zone['off_pin']}, on_pin={zone['on_pin']}) will be set {'OPEN' if start else 'CLOSE'} using{' pulse' if pulse_mode else ''} pin_id({pin_id}).value({pin_value})")
+    if pulse_mode:
+        # pulse the pin
+        Pin(pin_id, Pin.OUT).value(pin_value)
+        time.sleep(0.060) # is precise timing really needed?
+        Pin(pin_id, Pin.IN)
+    else:
         # leave the pin in the state
         if start:
             Pin(pin_id, Pin.OUT, value=pin_value)
         else:
             Pin(pin_id, Pin.IN)
-    else:
-        # pulse the pin
-        Pin(pin_id, Pin.OUT).value(pin_value)
-        time.sleep(0.060)
-        Pin(pin_id, Pin.IN)
 
 async def apply_valves(new_status: int) -> None:
     global valve_status
@@ -171,12 +172,12 @@ async def schedule_irrigation():
             # follwing checks disabled the schedule until config change
             if not config['options']['settings']['enable_irrigation_schedule']:
                 schedule_completed_until[i] = sys.maxsize
-                debug(zone_id, i, f"Schedule #{i} zone[{zone_id}]='{z['name']}' disabled because all schedules is disabled")
+                debug(zone_id, i, f"Schedule[{i}] zone[{zone_id}]='{z['name']}' disabled because all schedules is disabled")
                 continue
 
             if not s['enabled']:
                 schedule_completed_until[i] = sys.maxsize
-                debug(zone_id, i, f"Schedule #{i} zone[{zone_id}]='{z['name']}' disabled because schedule is disabled")
+                debug(zone_id, i, f"Schedule[{i}] zone[{zone_id}]='{z['name']}' disabled because schedule is disabled")
                 continue
 
             duration_sec = s['duration_sec']
@@ -185,12 +186,12 @@ async def schedule_irrigation():
             duration_sec = min(round(duration_sec), 86400)
             if duration_sec <= 0:
                 schedule_completed_until[i] = sys.maxsize
-                debug(zone_id, i, f"Schedule #{i} zone[{zone_id}]='{z['name']}' disabled because duration_sec is zero")
+                debug(zone_id, i, f"Schedule[{i}] zone[{zone_id}]='{z['name']}' disabled because duration_sec is zero")
                 continue
 
             if s['expiry'] and local_timestamp > s['expiry']:
                 schedule_completed_until[i] = sys.maxsize
-                debug(zone_id, i, f"Schedule #{i} zone[{zone_id}]='{z['name']}' disabled because schedule expired")
+                debug(zone_id, i, f"Schedule[{i}] zone[{zone_id}]='{z['name']}' disabled because schedule expired")
                 continue
 
             sec_till_start = (86400 + s['start_sec'] - local_timestamp % 86400) % 86400
@@ -199,14 +200,14 @@ async def schedule_irrigation():
             if sec_till_start < sec_till_end:
                 # we are outside the schedule window = (start, end], skip till sec_till_start==86399
                 schedule_completed_until[i] = local_timestamp + sec_till_start + 1
-                debug(zone_id, i, f"Schedule #{i} zone[{zone_id}]='{z['name']}' suspended until next start: {schedule_completed_until[i]}")
+                debug(zone_id, i, f"Schedule[{i}] zone[{zone_id}]='{z['name']}' suspended until next start: {schedule_completed_until[i]}")
                 continue
 
             # weekday of current schedule start time, monday is 0, sunday is 6
             weekday = ((local_timestamp + sec_till_start) // 86400 + 2) % 7
             if not s['day_mask'] & (1 << weekday):
                 schedule_completed_until[i] = local_timestamp + sec_till_start + 1
-                debug(zone_id, i, f"Schedule #{i} zone[{zone_id}]='{z['name']}' suspended until next start {schedule_completed_until[i]} because of day_mask={s['day_mask']:07b} weekday={weekday}")
+                debug(zone_id, i, f"Schedule[{i}] zone[{zone_id}]='{z['name']}' suspended until next start {schedule_completed_until[i]} because of day_mask={s['day_mask']:07b} weekday={weekday}")
                 continue
 
             if (s['enable_soil_moisture_sensor'] and
@@ -216,13 +217,13 @@ async def schedule_irrigation():
                     # schedule is active, check if we should stop
                     if soil_moisture >= z['soil_moisture_wet']:
                         schedule_completed_until[i] = local_timestamp + sec_till_start + 1
-                        info(zone_id, i, f"Schedule #{i} zone[{zone_id}]='{z['name']}' stopped and suspended until next start {schedule_completed_until[i]} because soil_moisture={soil_moisture} is wet")
+                        info(zone_id, i, f"Schedule[{i}] zone[{zone_id}]='{z['name']}' stopped and suspended until next start {schedule_completed_until[i]} because soil_moisture={soil_moisture} is wet")
                         continue
                 else:
                     # schedule is about to start, is it dry enough?
                     if soil_moisture >= z['soil_moisture_dry']:
                         schedule_completed_until[i] = local_timestamp + sec_till_start + 1
-                        info(zone_id, i, f"Schedule #{i} zone[{zone_id}]='{z['name']}' won't start and suspended until next start {schedule_completed_until[i]} because soil_moisture={soil_moisture} is not dry enough")
+                        info(zone_id, i, f"Schedule[{i}] zone[{zone_id}]='{z['name']}' won't start and suspended until next start {schedule_completed_until[i]} because soil_moisture={soil_moisture} is not dry enough")
                         continue
 
             # we should irrigate, set the valve status
@@ -238,7 +239,9 @@ async def schedule_irrigation():
 
         for i, s in enumerate(config["schedules"]):
             if (schedule_status ^ new_schedule_status) & (1 << i):
-                info(s['zone_id'], i, f"Schedule #{i} zone[{zone_id}]='{z['name']}' {'started' if new_schedule_status & (1 << i) else 'ended'} for zone {s['zone_id']} ({z['name']})")
+                zone_id = s['zone_id']
+                z = config["zones"][zone_id]
+                info(s['zone_id'], i, f"Schedule[{i}] zone[{zone_id}]='{z['name']}' {'started' if new_schedule_status & (1 << i) else 'ended'} for zone {s['zone_id']} ({z['name']})")
         await apply_valves(valve_desired)
         schedule_status = new_schedule_status
         if heartbeat_pin_id > 0:
@@ -329,7 +332,7 @@ def read_soil_moisture_raw(zone_id: int) -> int:
         return None
     if 0 <= soil_moisture_config['power_pin_id']:
         Pin(soil_moisture_config['power_pin_id'], Pin.OUT).value(1)
-        time.sleep(0.010)
+        asyncio.sleep(0.010)
     # https://docs.micropython.org/en/latest/esp32/quickref.html#adc-analog-to-digital-conversion
     adc = ADC(soil_moisture_config['adc_pin_id'], atten=ADC.ATTN_11DB)
     raw_reading = 0
@@ -375,7 +378,7 @@ async def serve_file(filename: str, writer) -> None:
         with open(filename, 'r', encoding='utf-8') as f:
             while length := f.readinto(buf):
                 writer.write(buf[:length])
-        info(None, None, f'Served [{filename}] in {time.ticks_ms() - start_time}ms')
+        debug(None, None, f'Served [{filename}] in {time.ticks_ms() - start_time}ms')
     except Exception as e:
         warn(None, None, f"Error serving [{filename}]: {e}")
         raise
@@ -570,8 +573,8 @@ async def main():
     await connect_wifi()
     await sync_ntp()
     # if not wlan.isconnected():
-        # we can go to wifi setup mode
-        # warn(None, None, "WiFi connection failed on startup, starting irrigation scheduler, will retry reconnecting in background")
+    #     # we can go to wifi setup mode
+    #     warn(None, None, "WiFi connection failed on startup, starting irrigation scheduler, will retry reconnecting in background")
     asyncio.create_task(keep_wifi_connected())
     asyncio.create_task(periodic_ntp_sync())
     asyncio.create_task(send_metrics())
