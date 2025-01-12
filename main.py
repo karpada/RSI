@@ -13,13 +13,13 @@ from uos import rename, stat
 
 # Global variables
 MICROPYTHON_TO_TIMESTAMP: int = 946684800 # 2000-1970 --> 3155673600 - 2208988800
+WIFI_SETUP_MODE = False
 micropython_to_localtime: int = 0
 wlan: network.WLAN = network.WLAN(network.STA_IF)
 config: dict = None
 valve_status: int = 0
 schedule_status: int = 0
 heartbeat_pin_id: int = -1
-wifi_setup_mode = False
 schedule_completed_until = []
 
 # logging
@@ -169,7 +169,7 @@ async def schedule_irrigation():
             zone_id = s['zone_id']
             z = config["zones"][zone_id]
 
-            # follwing checks disabled the schedule until config change
+            # following checks disabled the schedule until config change
             if not config['options']['settings']['enable_irrigation_schedule']:
                 schedule_completed_until[i] = sys.maxsize
                 debug(zone_id, i, f"Schedule[{i}] zone[{zone_id}]='{z['name']}' disabled because all schedules is disabled")
@@ -348,7 +348,7 @@ def get_soil_moisture_milli(zone_id: int, raw_reading: int = None) -> int:
         raw_reading = read_soil_moisture_raw(zone_id)
     if raw_reading is None:
         return None
-    # raw range of [1..65534] is linarly mapped onto [1..999], 0->0, 65535->1000
+    # raw range of [1..65534] is linearly mapped onto [1..999], 0->0, 65535->1000
     milli_moist = int((65.3+raw_reading) // 65.6)
     return 1000-milli_moist if config['options']['soil_moisture_sensor']['high_is_dry'] else milli_moist
 
@@ -427,7 +427,7 @@ async def handle_request(reader, writer):
 
         response = "Should not happen"
         if method == 'GET' and path == '/':
-            filename = 'setup.html' if wifi_setup_mode else 'index.html'
+            filename = 'setup.html' if WIFI_SETUP_MODE else 'index.html'
             content_type = 'text/html'
         elif method == 'GET' and path == '/favicon.ico':
             content_type = 'image/svg+xml'
@@ -478,9 +478,8 @@ async def handle_request(reader, writer):
                 "log": [{"timestamp": l.timestamp, "level": l.level, "zone_id": l.zone_id, "schedule_id": l.schedule_id, "message": l.message} for l in LOG]
             })
         elif method == 'GET' and path == '/logtsv':
-            now = get_local_timestamp()
             response = '\n'.join([f"{l.timestamp}\t{l.level}\t{l.zone_id}\t{l.schedule_id}\t{l.message}" for l in LOG])
-        elif wifi_setup_mode and method == 'GET' and path == '/setup':
+        elif WIFI_SETUP_MODE and method == 'GET' and path == '/setup':
             info(None, None, f"Setup: query_params={query_params}")
             save_as_json('config.json', {"options": { "wifi": query_params }})
             info(None, None, "Restarting...")
@@ -523,14 +522,14 @@ async def send_metrics():
             await asyncio.sleep(config['options']['monitoring']['send_interval_sec'])
 
 async def wait_for_wifi_setup(button_pin_id: int, wait_time: int) -> None:
-    global wifi_setup_mode
+    global WIFI_SETUP_MODE
 
     for _ in range(round(wait_time*10)):
         await asyncio.sleep(0.1)
         if 0 == Pin(button_pin_id, Pin.IN, Pin.PULL_UP).value():
-            wifi_setup_mode = True
+            WIFI_SETUP_MODE = True
             break
-    if wifi_setup_mode:
+    if WIFI_SETUP_MODE:
         if heartbeat_pin_id >= 0:
             PWM(Pin(heartbeat_pin_id), freq=5, duty_u16=32768)
         ap = network.WLAN(network.AP_IF)
@@ -574,7 +573,7 @@ async def main():
     await sync_ntp()
     # if not wlan.isconnected():
     #     # we can go to wifi setup mode
-    #     warn(None, None, "WiFi connection failed on startup, starting irrigation scheduler, will retry reconnecting in background")
+    #     warn(None, None, "Wi-Fi connection failed on startup, starting irrigation scheduler, will retry reconnecting in background")
     asyncio.create_task(keep_wifi_connected())
     asyncio.create_task(periodic_ntp_sync())
     asyncio.create_task(send_metrics())
