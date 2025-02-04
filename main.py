@@ -82,7 +82,7 @@ async def keep_wifi_connected():
         while wlan.isconnected():
             await asyncio.sleep(10)
         await asyncio.sleep(60)
-        connect_wifi()
+        await connect_wifi()
 
 # Time functions
 async def sync_ntp() -> bool:
