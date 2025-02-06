@@ -425,7 +425,9 @@ async def handle_request(reader, writer):
 
         debug(None, None, f"Request: {method:4} {path:14} query_params={query_params}, (content_length={content_length})")  #     headers={headers}")
 
+        reboot = False
         response = "Should not happen"
+
         if method == 'GET' and path == '/':
             filename = 'setup.html' if WIFI_SETUP_MODE else 'index.html'
             content_type = 'text/html'
@@ -446,9 +448,8 @@ async def handle_request(reader, writer):
             # curl -X POST --data-binary @main.py http://192.168.68.114/file/main.py\?reboot\=1
             info(None, None, f"Updating {path[6:]}")
             await store_file(reader, content_length, path[6:])
-            if '1' == query_params.get('reboot', '0'):
-                info(None, None, "Rebooting...")
-                reset()
+            # if '1' == query_params.get('reboot', '0'):
+            #     reboot = True
             response = ujson.dumps({
                 "method": method,
                 "filepath": path[6:],
@@ -479,14 +480,16 @@ async def handle_request(reader, writer):
             })
         elif method == 'GET' and path == '/logtsv':
             response = '\n'.join([f"{l.timestamp}\t{l.level}\t{l.zone_id}\t{l.schedule_id}\t{l.message}" for l in LOG])
+        elif method == 'PUT' and path == '/reboot':
+            response = "OK"
+            content_type = 'text/html'
+            reboot = True
         elif WIFI_SETUP_MODE and method == 'GET' and path == '/setup':
             info(None, None, f"Setup: query_params={query_params}")
             save_as_json('config.json', {"options": { "wifi": query_params }})
-            info(None, None, "Restarting...")
-            await asyncio.sleep(0.1)
-            if heartbeat_pin_id > 0:
-                Pin(heartbeat_pin_id, Pin.IN)
-            reset()
+            response = "OK"
+            content_type = 'text/html'
+            reboot = True
         else:
             response = f"Resource not found: method={method} path={path}"
             status_code = 404
@@ -507,6 +510,14 @@ async def handle_request(reader, writer):
     await writer.drain()
     writer.close()
     await writer.wait_closed()
+
+    if reboot:
+        info(None, None, "Restarting...")
+        await asyncio.sleep(1)
+        if heartbeat_pin_id > 0:
+            Pin(heartbeat_pin_id, Pin.IN)
+        reset()
+
 
 async def send_metrics():
     while True:

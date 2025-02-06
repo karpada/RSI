@@ -142,10 +142,9 @@ Note: The H-Bridge L298N has an onboard 5V regulator which can be used to power 
 
 ## Updating the Code
 ```shell
-URL=http://s2demo.local
-for html in *.html; do time curl -X POST --data-binary @$html ${URL}/file/$html | jq; done
-curl -X POST --data-binary @main.py ${URL}/file/main.py\?reboot\=1
-curl ${URL}/status | jq
+$ HOST=s2demo.local
+$ for f in index.html setup.html main.py; do curl -X POST --data-binary @$f $HOST/file/$f | jq; done && curl -X PUT $HOST/reboot
+$ curl ${HOST}/status | jq
 ```
 
 # TODO
