@@ -258,7 +258,7 @@ def apply_config(new_config: dict) -> None:
     global heartbeat_pin_id
     global LOG
 
-    info(None, None, f"Applying new config...")
+    info(None, None, f"Applying new config = {new_config}")
     normalized_config = {"zones": [], "schedules": [], "options": {}}
     for i, z in enumerate(new_config.get('zones', [])):
         normalized_config['zones'].append({
@@ -440,7 +440,6 @@ async def handle_request(reader, writer):
         elif method == 'POST' and path == '/config':
             body = ujson.loads((await reader.read(content_length)).decode()) if content_length > 0 else None
             # restore backup: jq . irrigation-config.json | curl -H "Content-Type: application/json" -X POST --data-binary @- http://192.168.68.ESP/config
-            info(None, None, f"applying new config = {body}")
             apply_config(body)
             response = ujson.dumps(config)
             save_as_json('config.json', config)
