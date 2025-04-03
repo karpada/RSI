@@ -67,6 +67,11 @@
                 <div class="mt-2 flex space-x-2">
                     <button onclick="addSchedule()" class="bg-blue-500 text-white px-4 py-2 rounded">Add Schedule</button>
                 </div>
+                <div class="mt-2 flex space-x-2">
+                    <button type="button" onclick="triggerAdhocIrrigation()" class="bg-blue-500 text-white px-4 py-2 rounded">Ad-hoc (minutes)</button>
+                    <select id="adhoc-zone" class="narrow border rounded px-2 py-2"></select>
+                    <input type="number" id="adhoc-duration" class="border rounded px-2 py-2" placeholder="Duration(minutes)" style="width: 70px;">
+                </div>
             </div>
 
             <div class="bg-white p-4 rounded shadow">
@@ -387,6 +392,7 @@
                         renderZones();
                         renderSchedules();
                         renderOptions();
+                        populateAdhocZones();
                     } catch (error) {
                         console.error('Error restoring config:', error);
                         alert('Error restoring configuration');
@@ -394,6 +400,29 @@
                 };
                 reader.readAsText(file);
             });
+        }
+
+        async function triggerAdhocIrrigation() {
+            const zoneId = document.getElementById('adhoc-zone').value;
+            const duration_sec = Math.floor(60 * document.getElementById('adhoc-duration').value);
+            try {
+                const response = await fetch(`/adhoc?zone_id=${zoneId}&duration_sec=${duration_sec}`, { method: 'PUT' });
+                if (response.ok) {
+                    alert('Ad-hoc irrigation started successfully!');
+                } else {
+                    alert('Failed to start ad-hoc irrigation.');
+                }
+            } catch (error) {
+                console.error('Error triggering ad-hoc irrigation:', error);
+                alert('Error triggering ad-hoc irrigation.');
+            }
+        }
+
+        function populateAdhocZones() {
+            const adhocZoneSelect = document.getElementById('adhoc-zone');
+            adhocZoneSelect.innerHTML = config.zones.map((zone, zoneIndex) => `
+                <option value=${zoneIndex} ${config.zones[zoneIndex].master ? 'disabled' : ''}>${zone.name}</option>
+            `).join('');
         }
 
         function init() {
@@ -406,6 +435,7 @@
                     renderZones();
                     renderSchedules();
                     renderOptions();
+                    populateAdhocZones();
                 });
             updateStatus();
             setInterval(updateStatus, 11000);

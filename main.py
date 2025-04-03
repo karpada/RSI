@@ -21,6 +21,7 @@ valve_status: int = 0
 schedule_status: int = 0
 heartbeat_pin_id: int = -1
 schedule_completed_until = []
+ad_hoc_irrigation_until = {}
 
 # logging
 def get_local_timestamp() -> int:
@@ -230,6 +231,17 @@ async def schedule_irrigation():
             valve_desired |= (1 << s['zone_id'])
             new_schedule_status |= (1 << i)
             # debug(zone_id, i, f"valve_desired={valve_desired:08b} for schedule={s}")
+
+        # check if we have ad-hoc irrigation
+        for zone_id, end_time in list(ad_hoc_irrigation_until.items()):
+            z = config["zones"][zone_id]
+            if end_time > local_timestamp :
+                valve_desired |= (1 << zone_id)
+                if not valve_status & (1 << zone_id):
+                    info(zone_id, None, f"Ad-hoc irrigation in zone[{zone_id}]='{z['name']}' (ends in {end_time - local_timestamp}s) is starting")
+            else:
+                info(zone_id, None, f"Ad-hoc irrigation in zone[{zone_id}]='{z['name']}' has ended")
+                del(ad_hoc_irrigation_until[zone_id])
 
         # debug(None, None, f"valve_desired={valve_desired:08b}")
         if valve_desired > 0:
@@ -443,6 +455,13 @@ async def handle_request(reader, writer):
             apply_config(body)
             response = ujson.dumps(config)
             save_as_json('config.json', config)
+        elif method == 'PUT' and path == '/adhoc':
+            duration_sec = int(query_params.get('duration_sec', 0))
+            zone_id = int(query_params.get('zone_id', -1))
+            if 0 <= zone_id < len(config['zones']) and duration_sec >= 0:
+                end_time = get_local_timestamp() + duration_sec
+                debug(zone_id, None, f"Ad-hoc irrigation for zone {zone_id} of {duration_sec}s (until {end_time})")
+                ad_hoc_irrigation_until[zone_id] = end_time
         elif method == 'POST' and path.startswith('/file/'):
             # curl -X POST --data-binary @main.py http://192.168.68.114/file/main.py\?reboot\=1
             info(None, None, f"Updating {path[6:]}")
@@ -468,6 +487,7 @@ async def handle_request(reader, writer):
                 "schedule_status": f"{schedule_status:08b}",
                 "mcu_temperature": mcu_temperature(),
                 "schedule_completed_until": [max(t-now, -1) for t in schedule_completed_until],
+                "ad_hoc_irrigation": { f"Zone[{zone_id}]='{config['zones'][zone_id]['name']}'": max(t-now, -1) for zone_id, t in ad_hoc_irrigation_until.items() },
                 "hostname": config['options']['wifi']['hostname'],
                 "mac_address": ':'.join([f'{b:02x}' for b in wlan.config('mac')])
             })
