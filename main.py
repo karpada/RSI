@@ -335,7 +335,8 @@ def apply_config(new_config: dict) -> None:
 
     micropython_to_localtime = MICROPYTHON_TO_TIMESTAMP + round(config['options']['settings']['timezone_offset'] * 3600)
     heartbeat_pin_id = config['options']['settings']['heartbeat_pin_id']
-    schedule_completed_until = [0] * len(config['schedules'])
+     # puase all schedules until ntp sync
+    schedule_completed_until = [1_000_000_000] * len(config['schedules'])
     LOG = deque([l for l in LOG if l.level >= config['options']['log']['level']], config['options']['log']['max_lines'])
 
 def read_soil_moisture_raw(zone_id: int) -> int:
