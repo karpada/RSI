@@ -63,12 +63,16 @@
 
             <div class="bg-white p-4 rounded shadow">
                 <h2 class="text-xl font-semibold mb-2">Schedules</h2>
+                <div class="mt-2 flex space-x-2">
+                    <button type="button" onclick="triggerPauseSchedules()" class="bg-orange-500 text-white px-4 py-2 rounded">Pause (h)</button>
+                    <input type="number" id="pause-duration" class="border rounded px-2 py-2" placeholder="Duration(hours)" style="width: 70px;">
+                </div>
                 <div id="schedules-table"></div>
                 <div class="mt-2 flex space-x-2">
                     <button onclick="addSchedule()" class="bg-blue-500 text-white px-4 py-2 rounded">Add Schedule</button>
                 </div>
                 <div class="mt-2 flex space-x-2">
-                    <button type="button" onclick="triggerAdhocIrrigation()" class="bg-blue-500 text-white px-4 py-2 rounded">Ad-hoc (minutes)</button>
+                    <button type="button" onclick="triggerAdhocIrrigation()" class="bg-blue-500 text-white px-4 py-2 rounded">Ad-hoc (m)</button>
                     <select id="adhoc-zone" class="narrow border rounded px-2 py-2"></select>
                     <input type="number" id="adhoc-duration" class="border rounded px-2 py-2" placeholder="Duration(minutes)" style="width: 70px;">
                 </div>
@@ -400,6 +404,21 @@
                 };
                 reader.readAsText(file);
             });
+        }
+
+        async function triggerPauseSchedules() {
+            const duration_sec =  Math.floor(60 * 60 * document.getElementById('pause-duration').value);
+            try {
+                const response = await fetch(`/pause?duration_sec=${duration_sec}`, { method: 'PUT' });
+                if (response.ok) {
+                    alert('Schedules paused successfully!');
+                } else {
+                    alert('Failed to pause schedules.');
+                }
+            } catch (error) {
+                console.error('Error triggering pause schedules:', error);
+                alert('Error triggering pause schedules.');
+            }
         }
 
         async function triggerAdhocIrrigation() {

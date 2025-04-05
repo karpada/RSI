@@ -455,6 +455,10 @@ async def handle_request(reader, writer):
             apply_config(body)
             response = ujson.dumps(config)
             save_as_json('config.json', config)
+        elif method == 'PUT' and path == '/pause':
+            schedule_pause_until = get_local_timestamp() + int(query_params.get('duration_sec', 0))
+            info(None, None, f"Pausing schedule for {int(query_params.get('duration_sec', 0))} seconds")
+            schedule_completed_until[:] = [schedule_pause_until] * len(schedule_completed_until)
         elif method == 'PUT' and path == '/adhoc':
             duration_sec = int(query_params.get('duration_sec', 0))
             zone_id = int(query_params.get('zone_id', -1))
