@@ -89,7 +89,7 @@ async def keep_wifi_connected():
 async def sync_ntp() -> bool:
     try:
         settime()
-        debug(None, None, f'@{time.time()} NTP synced, UTC time={time.time()+MICROPYTHON_TO_TIMESTAMP} Local time(GMT{config["options"]["settings"]["timezone_offset"]:+})={time.time()+micropython_to_localtime}')
+        info(None, None, f'@{time.time()} NTP synced, UTC time={time.time()+MICROPYTHON_TO_TIMESTAMP} Local time(GMT{config["options"]["settings"]["timezone_offset"]:+})={time.time()+micropython_to_localtime}')
         return True
     except:
         warn(None, None, f'@{time.time()} Error syncing time, current UTC timestamp={time.time()+MICROPYTHON_TO_TIMESTAMP}')
@@ -97,9 +97,9 @@ async def sync_ntp() -> bool:
 
 async def periodic_ntp_sync():
     while True:
-        await asyncio.sleep(4 * 24 * 60 * 60)  # resync every 4 days
         while not await sync_ntp():
             await asyncio.sleep(10) # 10 seconds
+        await asyncio.sleep(4 * 24 * 60 * 60)  # resync every 4 days
 
 # Watering control functions
 def control_watering(zone_id: int, start: bool) -> None:
