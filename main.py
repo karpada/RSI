@@ -10,9 +10,12 @@ from ntptime import settime
 import uasyncio as asyncio
 import urequests as requests
 from uos import rename, stat
+from machine import RTC
 
 # Global variables
 MICROPYTHON_TO_TIMESTAMP: int = 946684800 # 2000-1970 --> 3155673600 - 2208988800
+TIMESTAMP_2001_01_01 = 978307200 # Monday, This is the date used when ntp is not available
+TIMESTAMP_2025_01_01 = 1735689600 # after ntp sync, date will be at least 2025-01-01
 WIFI_SETUP_MODE = False
 micropython_to_localtime: int = 0
 wlan: network.WLAN = network.WLAN(network.STA_IF)
@@ -100,6 +103,42 @@ async def periodic_ntp_sync():
         while not await sync_ntp():
             await asyncio.sleep(10) # 10 seconds
         await asyncio.sleep(4 * 24 * 60 * 60)  # resync every 4 days
+
+async def fallback_time_sync():
+    await asyncio.sleep(5)
+    if get_local_timestamp() > TIMESTAMP_2025_01_01:
+        return
+    sync_conf = config['options']['fallback_time_sync']
+    warn(None, None, f"no ntp sync, using mcu_temperature as fallback (conf={sync_conf}), starting...")
+    temperature_log = [0] * sync_conf['slices_per_day']
+    temperature_log_index = 0
+    rtc = RTC()
+    while get_local_timestamp() < TIMESTAMP_2025_01_01 and temperature_log_index < sync_conf["sync_days"] * sync_conf['slices_per_day']: # while no ntp sync
+        try:
+            temperature = 0
+            for _ in range(sync_conf['samples_per_slice']):
+                temperature += mcu_temperature() / sync_conf['samples_per_slice']
+                await asyncio.sleep(24 * 60 * 60 / sync_conf['slices_per_day'] / sync_conf['samples_per_slice'])
+            temperature_log[temperature_log_index % sync_conf['slices_per_day']] = 1.0 * temperature_log[temperature_log_index % sync_conf['slices_per_day']] + temperature
+            temperature_log_index += 1
+            debug(None, None, f"Temperature log: {temperature_log}")
+            if temperature_log_index % sync_conf['slices_per_day'] == 0:
+                # assuming that minimum temperature is at 6:15am
+                hours_till_6_15am = 24 * min((v, i) for i, v in enumerate(temperature_log))[1] / sync_conf['slices_per_day']
+                now_hours_gmt = (48 + 6.25 - hours_till_6_15am - config["options"]["settings"]["timezone_offset"]) % 24
+                basetime = list(rtc.datetime()) if TIMESTAMP_2001_01_01 < get_local_timestamp() else [2001, 1, 1, 0, 12, 0, 0, 0] # Monday noon
+                rtc_hour_gmt = basetime[4]+basetime[5]/60+basetime[6]/3600
+                adjustment_hours = (12 + now_hours_gmt - rtc_hour_gmt) % 24 - 12
+                if abs(adjustment_hours) < 24/sync_conf['slices_per_day'] * 1.5: # avoid jitter by requiring at least 2 slices
+                    info(None, None, f"skipping RTC adjustment, because adjustment_hours={adjustment_hours} is too small, temperature log: {temperature_log}")
+                    continue
+                basetime[4:7] = (0, 0, round(now_hours_gmt * 3600))
+                debug(None, None, f"RTC before adjustment: {rtc.datetime()}, will assign={basetime}")
+                rtc.datetime(basetime)
+                warn(None, None, f"it's {hours_till_6_15am} hours till 6:15am, adjusted RTC by {adjustment_hours:+}h ({rtc_hour_gmt} -> {now_hours_gmt}), temperature log: {temperature_log}")
+        except Exception as e:
+            warn(None, None, f"Error in fallback_time_sync: {e}")
+    info(None, None, "synced, fallback_time_sync ended")
 
 # Watering control functions
 def control_watering(zone_id: int, start: bool) -> None:
@@ -297,7 +336,7 @@ def apply_config(new_config: dict) -> None:
             "expiry": int(s.get('expiry', 0)),
         })
     bo = new_config.get('options', {})
-    for key in ['wifi', 'monitoring', 'soil_moisture_sensor', 'settings', 'log']:
+    for key in ['wifi', 'monitoring', 'soil_moisture_sensor', 'settings', 'log', 'fallback_time_sync']:
         bo.setdefault(key, {})
     normalized_config['options'] = {
         "wifi": {
@@ -324,6 +363,11 @@ def apply_config(new_config: dict) -> None:
             "level": int(bo['log'].get('level', 20)),
             "max_lines": int(bo['log'].get('max_lines', 50)),
         },
+        "fallback_time_sync": {
+            "sync_days": int(bo['fallback_time_sync'].get('sync_days', 1)),
+            "slices_per_day": int(bo['fallback_time_sync'].get('slices_per_day', 48)),
+            "samples_per_slice": int(bo['fallback_time_sync'].get('samples_per_slice', 15)),
+        },
     }
 
     # if zones changed, turn off all valves
@@ -335,8 +379,8 @@ def apply_config(new_config: dict) -> None:
 
     micropython_to_localtime = MICROPYTHON_TO_TIMESTAMP + round(config['options']['settings']['timezone_offset'] * 3600)
     heartbeat_pin_id = config['options']['settings']['heartbeat_pin_id']
-     # puase all schedules until ntp sync
-    schedule_completed_until = [1_000_000_000] * len(config['schedules'])
+    # disable schedules until fallback_time_sync or NTP synchronization is complete
+    schedule_completed_until = [TIMESTAMP_2001_01_01] * len(config['schedules'])
     LOG = deque([l for l in LOG if l.level >= config['options']['log']['level']], config['options']['log']['max_lines'])
 
 def read_soil_moisture_raw(zone_id: int) -> int:
@@ -605,14 +649,11 @@ async def main():
     await apply_valves(0)
 
     await connect_wifi()
-    await sync_ntp()
-    # if not wlan.isconnected():
-    #     # we can go to wifi setup mode
-    #     warn(None, None, "Wi-Fi connection failed on startup, starting irrigation scheduler, will retry reconnecting in background")
     asyncio.create_task(keep_wifi_connected())
     asyncio.create_task(periodic_ntp_sync())
     asyncio.create_task(send_metrics())
     asyncio.create_task(schedule_irrigation())
+    asyncio.create_task(fallback_time_sync())
 
     server = await asyncio.start_server(handle_request, "0.0.0.0", 80)
     info(None, None, 'Server listening on port 80')

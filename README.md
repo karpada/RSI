@@ -148,5 +148,4 @@ $ curl ${HOST}/status | jq
 ```
 
 # TODO
-1. Time sync by temprature sensor
 1. Autohide confirmation messages
