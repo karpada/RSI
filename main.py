@@ -297,7 +297,7 @@ def apply_config(new_config: dict) -> None:
             "expiry": int(s.get('expiry', 0)),
         })
     bo = new_config.get('options', {})
-    for key in ['wifi', 'monitoring', 'soil_moisture_sensor', 'settings']:
+    for key in ['wifi', 'monitoring', 'soil_moisture_sensor', 'settings', 'log']:
         bo.setdefault(key, {})
     normalized_config['options'] = {
         "wifi": {
@@ -321,9 +321,9 @@ def apply_config(new_config: dict) -> None:
             "relay_active_is_high": bool(bo['settings'].get('relay_active_is_high', False)),
         },
         "log": {
-            "level": int(bo.get('level', 20)),
-            "max_lines": int(bo.get('max_lines', 50)),
-        }
+            "level": int(bo['log'].get('level', 20)),
+            "max_lines": int(bo['log'].get('max_lines', 50)),
+        },
     }
 
     # if zones changed, turn off all valves
