@@ -148,7 +148,7 @@ def control_watering(zone_id: int, start: bool) -> None:
     zone = config["zones"][zone_id]
     pin_id = zone['on_pin'] if start else zone['off_pin']
     if pin_id < 0:
-        info(zone_id, None, f"Zone[{zone_id}]='{zone['name']}' (off_pin={zone['off_pin']}, on_pin={zone['on_pin']}) will NOP on {'open' if start else 'close'} because pin_id < 0")
+        warn(zone_id, None, f"Zone[{zone_id}]='{zone['name']}' (off_pin={zone['off_pin']}, on_pin={zone['on_pin']}) will NOP on {'open' if start else 'close'} because pin_id < 0")
         return
     pin_value = 1 if zone['active_is_high'] else 0
     pulse_mode = zone['on_pin'] != zone['off_pin']
@@ -266,9 +266,16 @@ async def schedule_irrigation():
                         info(zone_id, i, f"Schedule[{i}] zone[{zone_id}]='{z['name']}' won't start and suspended until next start {schedule_completed_until[i]} because soil_moisture={soil_moisture} is not dry enough")
                         continue
 
+            # schedule status unaffected by interval duty cycle (avoiding log spam)
+            new_schedule_status |= (1 << i)
+
+            if s["interval_duration_sec"] > 0:
+                if (86400 - sec_till_start) % s["interval_duration_sec"] >= s["interval_on_sec"]:
+                    # we are outside the fogger window
+                    continue
+
             # we should irrigate, set the valve status
             valve_desired |= (1 << s['zone_id'])
-            new_schedule_status |= (1 << i)
             # debug(zone_id, i, f"valve_desired={valve_desired:08b} for schedule={s}")
 
         # check if we have ad-hoc irrigation
@@ -333,6 +340,8 @@ def apply_config(new_config: dict) -> None:
             "duration_sec": int(s['duration_sec']),
             "enable_soil_moisture_sensor": bool(s.get('enable_soil_moisture_sensor', True)),
             "day_mask": int(s.get('day_mask', 0b1111111)),
+            "interval_duration_sec": max(int(s.get('interval_duration_sec', 0)), 0),
+            "interval_on_sec": max(int(s.get('interval_on_sec', 10)), 0),
             "expiry": int(s.get('expiry', 0)),
         })
     bo = new_config.get('options', {})

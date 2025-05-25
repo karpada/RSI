@@ -227,6 +227,8 @@
                             <th class="narrow">Enabled</th>
                             <th class="narrow">Weekdays</th>
                             <th class="narrow">Use Soil Moisture Sensor</th>
+                            <th class="narrow">Interval (0=disable, sec)</th>
+                            <th class="narrow">Interval On (sec)</th>
                             <th>Expiry</th>
                             <th>Action</th>
                         </tr>
@@ -251,6 +253,8 @@
                                     `).join('')}
                                 </td>
                                 <td class="border px-4 py-2 narrow"><input type="checkbox" ${schedule.enable_soil_moisture_sensor ? 'checked' : ''} onchange="updateSchedule(${index}, 'enable_soil_moisture_sensor', this.checked)" class="w-4 h-4"></td>
+                                <td class="border px-4 py-2 narrow"><input class="narrow" type="number" value="${schedule.interval_duration_sec}" onchange="updateSchedule(${index}, 'interval_duration_sec', this.value)"></td>
+                                <td class="border px-4 py-2 narrow"><input class="narrow" type="number" value="${schedule.interval_on_sec}" onchange="updateSchedule(${index}, 'interval_on_sec', this.value)"></td>
                                 <td class="border px-4 py-2"><input type="datetime-local" value="${schedule.expiry ? new Date(schedule.expiry * 1000).toISOString().slice(0, 16) : ""}" onchange="updateSchedule(${index}, 'expiry', this.value ? new Date(this.value).getTime() / 1000) : 0"></td>
                                 <td class="border px-4 py-2"><button onclick="removeSchedule(${index})" class="bg-red-500 text-white px-2 py-1 rounded">Remove</button></td>
                             </tr>
