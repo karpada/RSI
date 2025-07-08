@@ -69,7 +69,7 @@ Depends on the valve/pump used. The controller may be powered by a USB charger o
 Note: The H-Bridge L298N has an onboard 5V regulator which can be used to power the controller via the VBUS pin.
 
 ## Soil Moisture Sensor (Optional)
-1. Build one based on a [10K ohm resistor](https://www.instructables.com/DIY-SOIL-MOISTURE-SENSOR-CHEAP-YET-ACCURATE-/)
+1. Build one based on a [10kΩ resistor](https://www.instructables.com/DIY-SOIL-MOISTURE-SENSOR-CHEAP-YET-ACCURATE-/)
     * Ground and VCC can be shared among multiple sensors.
     * You can use any type of probe, such as a nail or stainless steel wire.
 1. Buy a [LM393](https://www.google.com/search?q=LM393) module
@@ -104,41 +104,72 @@ Note: The H-Bridge L298N has an onboard 5V regulator which can be used to power 
 ![Options](readme_images/ui-options.png)
 
 ### Zones (Valves)
-1. **Master**: This zone will be turned on before any other zone and turned off after all zones are turned off.
-1. **On Pin / Off Pin**: The GPIO pin number to control the valve. If a latching valve is used, assign a different pin ID for on/off.
+Each zone represents a valve or irrigation output that can be controlled independently. Configure the following fields:
+
+1. **Name**: Descriptive name for the zone (e.g., "Front Yard", "Vegetable Garden")
+1. **Master**: Check if this zone should act as a master valve that turns on before any other zone and turns off after all zones are done
+1. **Active is High**: Check if the valve is activated when the GPIO pin is set to HIGH (unchecked means valve activates on LOW)
+1. **On Pin**: GPIO pin number to turn the valve on (for latching valves, this is the "open" pin)
+1. **Off Pin**: GPIO pin number to turn the valve off (for latching valves, this is the "close" pin; for regular valves, same as On Pin)
+1. **Irrigation Factor Override**: Manual override for irrigation duration factor (-1 = use automatic calculation based on soil moisture)
+1. **Soil Moisture Dry**: ADC reading value considered "dry" (irrigation starts below this value)
+1. **Soil Moisture Wet**: ADC reading value considered "wet" (irrigation stops above this value)
+1. **Soil Moisture ADC Pin**: GPIO pin connected to the analog output of the [soil moisture sensor](#soil-moisture-sensor-optional)
+1. **Soil Moisture Power Pin**: GPIO pin used to power the soil moisture sensor (may be shared between zones as current is limited by a 10kΩ resistor)
 
 ### Schedules
-1. **Apply Factor**: Apply factor to the watering time. The factor is determined by the `irrigation_factor` section in the options.
+Each schedule defines when and how a specific zone should be watered:
+
+1. **Zone**: Select which zone this schedule controls (master zones cannot be scheduled directly)
+1. **Start Time**: Time of day when irrigation should begin (24-hour format)
+1. **Duration**: How long to run irrigation in minutes
+1. **Enabled**: Check to enable this schedule (uncheck to temporarily disable without deleting)
+1. **Weekdays**: Select which days of the week this schedule should run (M=Monday, T=Tuesday, W=Wednesday, T=Thursday, F=Friday, S=Saturday, S=Sunday)
+1. **Use Soil Moisture Sensor**: Check to use soil moisture readings to determine if irrigation is needed
+1. **Interval**: Pulsed irrigation (for germination / misting etc.) - time between pulse start to next pulse start in seconds (0 = continuous watering)
+1. **Interval On**: Pulsed irrigation - how long each pulse should last in seconds
+1. **Expiry**: Optional expiration date/time for temporary schedules (leave blank for permanent schedules)
+
+#### Schedule actions
+- **Pause Schedules**: Temporarily pause all scheduled irrigation for a specified number of hours
+- **Ad-hoc Irrigation**: Manually trigger irrigation for a specific zone and duration in minutes (may be stopped by setting to 0)
 
 ### Options
 
-#### irrigation_factor
-1. **reference_schedule_id**: The schedule ID used as a reference to calculate the irrigation factor.
-1. **soil_moisture_dry**: If the soil moisture is below this value, irrigation will start.
-1. **soil_moisture_wet**: If the soil moisture reaches this value, irrigation will stop and `irrigation_factor` will be assigned the relative time needed to reach the wet value.
-1. **override**: Manual override for the `irrigation_factor`. `-1` means no override.
-
 #### wifi
-1. **hostname**: The hostname of the controller, allows connecting to the controller using the hostname.local.
-1. **ssid**: Your WiFi SSID (name).
-1. **password**: Your WiFi password.
+1. **ssid**: Your WiFi SSID (network name) - leave empty to disable WiFi connection
+1. **password**: Your WiFi password
+1. **hostname**: The hostname of the controller for network identification (default: `rsi-` + last 3 MAC address bytes, e.g., `rsi-a1b2c3`). Allows connecting using hostname.local
 
 #### monitoring
-1. **thingsspeak_apikey**: If you want to send the data to ThingSpeak, provide the write API key.
-1. **send_interval_sec**: Interval in seconds to send the data to the monitoring service.
+1. **thingsspeak_apikey**: ThingSpeak Write API key for sending telemetry data (leave empty to disable)
+1. **send_interval_sec**: Interval in seconds between sending data to monitoring service (default: 300 seconds = 5 minutes)
 
 #### soil_moisture_sensor
-1. **power_pin_id**: The GPIO pin ID to power the soil moisture sensor.
-1. **adc_pin_id**: The GPIO pin ID to read the soil moisture sensor. Connect this pin to the analog out pin of the sensor (sometimes marked as AO).
-1. **high_is_dry**: If the sensor reads high when dry, set this to true.
-1. **sample_count**: The number of samples to take to calculate the average soil moisture.
+1. **high_is_dry**: Check if sensor reads high values when soil is dry (default: true for most sensors)
+1. **sample_count**: Number of ADC readings to average for each soil moisture measurement (default: 3)
 
 #### settings
-1. **relay_pin_id**: The GPIO pin ID of the main relay (activated while actuating the valves).
-1. **relay_active_is_high**: If the main relay is actuated when the pin is high.
-1. **heartbeat_pin_id**: The GPIO pin ID of the onboard LED.
-1. **enable_irrigation_schedule**: Enable/disable the irrigation schedule.
-1. **timezone_offset**: Local timezone offset in hours.
+1. **enable_irrigation_schedule**: Enable/disable all scheduled irrigation (default: true)
+1. **timezone_offset**: Local timezone offset in hours from UTC (default: -7 for PDT/PST)
+1. **relay_pin_id**: GPIO pin ID of the master relay that powers valve drivers (default: -1 = disabled)
+1. **heartbeat_pin_id**: GPIO pin ID of the onboard LED for status indication (auto-detected based on board)
+1. **relay_active_is_high**: Check if master relay activates when pin is HIGH (default: false)
+
+#### log
+1. **level**: Minimum log level to record (10=debug, 20=info, 30=warning, default: 20)
+1. **max_lines**: Maximum number of log entries to keep in memory (default: 50)
+
+#### fallback_time_sync
+Advanced settings for time synchronization when NTP is unavailable (uses MCU temperature cycles):
+1. **sync_days**: Number of days to monitor temperature patterns for time sync (default: 1)
+1. **slices_per_day**: Number of temperature measurements per day (default: 48 = every 30 minutes)
+1. **samples_per_slice**: Number of temperature readings per slice for averaging (default: 15)
+
+### Configuration Actions
+- **Apply**: Save the current configuration to the device
+- **Save As**: Download the configuration as a JSON file for backup
+- **Open**: Upload a previously saved configuration file
 
 ## Updating the Code
 ```shell
