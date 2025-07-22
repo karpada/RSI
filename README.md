@@ -177,6 +177,3 @@ $ HOST=s2demo.local
 $ for f in index.html setup.html main.py; do curl -X POST --data-binary @$f $HOST/file/$f | jq; done && curl -X PUT $HOST/reboot
 $ curl ${HOST}/status | jq
 ```
-
-# TODO
-1. Autohide confirmation messages
