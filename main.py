@@ -56,7 +56,7 @@ def load_from_json(filename: str) -> dict:
     try:
         with open(filename, 'r', encoding='utf-8') as f:
             return ujson.load(f)
-    except:
+    except Exception:
         return None
 
 async def connect_wifi() -> None:
@@ -94,7 +94,7 @@ async def sync_ntp() -> bool:
         settime()
         info(None, None, f'@{time.time()} NTP synced, UTC time={time.time()+MICROPYTHON_TO_TIMESTAMP} Local time(GMT{config["options"]["settings"]["timezone_offset"]:+})={time.time()+micropython_to_localtime}')
         return True
-    except:
+    except Exception:
         warn(None, None, f'@{time.time()} Error syncing time, current UTC timestamp={time.time()+MICROPYTHON_TO_TIMESTAMP}')
         return False
 
