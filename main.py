@@ -45,6 +45,8 @@ def info(zone_id: int, schedule_id: int, message: str) -> None:
     log(20, zone_id, schedule_id, message)
 def warn(zone_id: int, schedule_id: int, message: str) -> None:
     log(30, zone_id, schedule_id, message)
+def error(zone_id: int, schedule_id: int, message: str) -> None:
+    log(40, zone_id, schedule_id, message)
 
 # Persistent storage functions
 def save_as_json(filename: str, data: dict) -> None:
@@ -56,7 +58,8 @@ def load_from_json(filename: str) -> dict:
     try:
         with open(filename, 'r', encoding='utf-8') as f:
             return ujson.load(f)
-    except Exception:
+    except Exception as e:
+        error(None, None, f"Error in load_from_json(): {e}")
         return None
 
 async def connect_wifi() -> None:
@@ -137,7 +140,7 @@ async def fallback_time_sync():
                 rtc.datetime(basetime)
                 warn(None, None, f"it's {hours_till_6_15am} hours till 6:15am, adjusted RTC by {adjustment_hours:+}h ({rtc_hour_gmt} -> {now_hours_gmt}), temperature log: {temperature_log}")
         except Exception as e:
-            warn(None, None, f"Error in fallback_time_sync: {e}")
+            error(None, None, f"Error in fallback_time_sync: {e}")
     info(None, None, "synced, fallback_time_sync ended")
 
 # Watering control functions
@@ -434,7 +437,7 @@ async def store_file(reader, length: int, filename: str) -> None:
         rename('upload.tmp', filename)
         info(None, None, f'Stored [{filename}] (stat={stat(filename)}) in {time.ticks_ms() - start_time}ms')
     except Exception as e:
-        warn(None, None, f"Error storing [{filename}]: {e}")
+        error(None, None, f"Error storing [{filename}]: {e}")
         raise
 
 async def serve_file(filename: str, writer) -> None:
@@ -446,7 +449,7 @@ async def serve_file(filename: str, writer) -> None:
                 writer.write(buf[:length])
         debug(None, None, f'Served [{filename}] in {time.ticks_ms() - start_time}ms')
     except Exception as e:
-        warn(None, None, f"Error serving [{filename}]: {e}")
+        error(None, None, f"Error serving [{filename}]: {e}")
         raise
 
 async def read_http_headers(reader) -> dict:
@@ -572,7 +575,7 @@ async def handle_request(reader, writer):
             status_code = 404
 
     except Exception as e:
-        warn(None, None, f"Error handling request: {e}")
+        warn(None, None, f"failed handling request: {e}")
         writer.write(f'HTTP/1.0 500 {get_status_message(500)}\r\n')
         await writer.drain()
         writer.close()
@@ -605,7 +608,7 @@ async def send_metrics():
                 params = {"api_key": config['options']['monitoring']['thingsspeak_apikey']} | {f'field{i+1}': m for i, m in enumerate(metrics)}
                 requests.get("http://api.thingspeak.com/update?" + '&'.join([f'{k}={v}' for k, v in params.items()]), timeout=10).close()
         except Exception as e:
-            warn(None, None, f"Error sending metrics: {e}")
+            warn(None, None, f"failed sending metrics: {e}")
         finally:
             await asyncio.sleep(config['options']['monitoring']['send_interval_sec'])
 
