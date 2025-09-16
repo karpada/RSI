@@ -390,7 +390,7 @@ def apply_config(new_config: dict) -> None:
     heartbeat_pin_id = config['options']['settings']['heartbeat_pin_id']
     # disable schedules until fallback_time_sync or NTP synchronization is complete
     schedule_completed_until = [TIMESTAMP_2001_01_01] * len(config['schedules'])
-    LOG = deque([l for l in LOG if l.level >= config['options']['log']['level']], config['options']['log']['max_lines'])
+    LOG = deque([i for i in LOG if i.level >= config['options']['log']['level']], config['options']['log']['max_lines'])
 
 def read_soil_moisture_raw(zone_id: int) -> int:
     soil_moisture_config = config["zones"][zone_id]
@@ -553,10 +553,10 @@ async def handle_request(reader, writer):
             now = get_local_timestamp()
             response = ujson.dumps({
                 "local_timestamp": now,
-                "log": [{"timestamp": l.timestamp, "level": l.level, "zone_id": l.zone_id, "schedule_id": l.schedule_id, "message": l.message} for l in LOG]
+                "log": [{"timestamp": i.timestamp, "level": i.level, "zone_id": i.zone_id, "schedule_id": i.schedule_id, "message": i.message} for i in LOG]
             })
         elif method == 'GET' and path == '/logtsv':
-            response = '\n'.join([f"{l.timestamp}\t{l.level}\t{l.zone_id}\t{l.schedule_id}\t{l.message}" for l in LOG])
+            response = '\n'.join([f"{i.timestamp}\t{i.level}\t{i.zone_id}\t{i.schedule_id}\t{i.message}" for i in LOG])
         elif method == 'PUT' and path == '/reboot':
             response = "OK"
             content_type = 'text/html'
