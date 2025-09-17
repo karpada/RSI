@@ -639,6 +639,7 @@ async def main():
         BoardBootstrap('ESP32S3', 0, 44), # blue
         BoardBootstrap('ESP8266', -1, 2),
         BoardBootstrap('S2_MINI', 0, 15),
+        BoardBootstrap('ESP32C3', 9, 8),
     ]:
         if bootstrap.name in sys.implementation._machine:
             break
