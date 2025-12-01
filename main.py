@@ -443,8 +443,8 @@ async def store_file(reader, length: int, filename: str) -> None:
 async def serve_file(filename: str, writer) -> None:
     try:
         start_time = time.ticks_ms()
-        buf = memoryview(bytearray(1024))
-        with open(filename, 'r', encoding='utf-8') as f:
+        buf = memoryview(bytearray(128))
+        with open(filename, 'rb') as f:
             while length := f.readinto(buf):
                 writer.write(buf[:length])
         debug(None, None, f'Served [{filename}] in {time.ticks_ms() - start_time}ms')
