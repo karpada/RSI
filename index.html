@@ -308,7 +308,7 @@
 <body class="bg-gray-100">
     <div class="container mx-auto p-4">
         <div class="flex justify-between items-center mb-4">
-            <h1  id="main-title" class="text-3xl font-bold">RSI - Real Simple Irrigation</h1>
+            <h1 id="main-title" class="text-3xl font-bold">RSI - Real Simple Irrigation</h1>
             <div id="current-time" class="text-xl font-semibold"></div>
         </div>
         <div class="space-y-4">
@@ -378,7 +378,6 @@
     </div>
 
     <script>
-
         function setupCollapsible(headerId, contentId) {
             const header = document.getElementById(headerId);
             const content = document.getElementById(contentId);
@@ -417,17 +416,17 @@
 
                 config.zones.forEach((zone, index) => {
                     const zoneElement = document.getElementById(`zone${index}`);
-                    if (status.valve_status.slice(-1-index)[0] === '1') {
+                    if (zoneElement && status.valve_status.slice(-1-index)[0] === '1') {
                         zoneElement.setAttribute('bgcolor', 'lightgreen');
-                    } else {
+                    } else if (zoneElement) {
                         zoneElement.removeAttribute('bgcolor');
                     }
                 });
                 config.schedules.forEach((schedule, index) => {
                     const scheduleElement = document.getElementById(`schedule${index}`);
-                    if (status.schedule_status.slice(-1-index)[0] === '1') {
+                    if (scheduleElement && status.schedule_status.slice(-1-index)[0] === '1') {
                         scheduleElement.setAttribute('bgcolor', 'lightgreen');
-                    } else {
+                    } else if (scheduleElement) {
                         scheduleElement.removeAttribute('bgcolor');
                     }
                 });
@@ -516,7 +515,7 @@
                                 <td class="border px-4 py-2 narrow"><input type="checkbox" ${schedule.enable_soil_moisture_sensor ? 'checked' : ''} onchange="updateSchedule(${index}, 'enable_soil_moisture_sensor', this.checked)" class="w-4 h-4"></td>
                                 <td class="border px-4 py-2 narrow"><input class="narrow" type="number" value="${schedule.interval_duration_sec}" onchange="updateSchedule(${index}, 'interval_duration_sec', this.value)"></td>
                                 <td class="border px-4 py-2 narrow"><input class="narrow" type="number" value="${schedule.interval_on_sec}" onchange="updateSchedule(${index}, 'interval_on_sec', this.value)"></td>
-                                <td class="border px-4 py-2"><input type="datetime-local" value="${schedule.expiry ? new Date(schedule.expiry * 1000).toISOString().slice(0, 16) : ""}" onchange="updateSchedule(${index}, 'expiry', this.value ? new Date(this.value).getTime() / 1000) : 0"></td>
+                                <td class="border px-4 py-2"><input type="datetime-local" value="${schedule.expiry ? new Date(schedule.expiry * 1000).toISOString().slice(0, 16) : ""}" onchange="updateSchedule(${index}, 'expiry', this.value ? new Date(this.value).getTime() / 1000 : 0)"></td>
                                 <td class="border px-4 py-2"><button onclick="removeSchedule(${index})" class="bg-red-500 text-white px-2 py-1 rounded">Remove</button></td>
                             </tr>
                         `).join('')}
@@ -532,25 +531,26 @@
         }
 
         function renderOptionsHtml(base_id, options_json) {
-        return Object.entries(options_json).reduce((acc, entry) => {
-            let id = `${base_id}.${entry[0]}`;
-            if (typeof entry[1] === 'object') {
-            return acc.concat(`
-                                <fieldset class="border border-gray-300 p-4 rounded-md">
-                                    <legend class="text-lg font-bold">${entry[0]}</legend>
-                                    ${renderOptionsHtml(id, entry[1])}
-                                </fieldset>
-                            `);
-            } else {
-            return acc.concat(`
-                                <div>
-                                    <label for="${id}" class="block">${entry[0]}</label>
-                                    <input type="${dataType2inputType[typeof(entry[1])]}" id="${id}"  ${true===entry[1] ? 'checked' : ''} name="${entry[0]}" value="${entry[1]}" onchange="${id} = this.${typeof(entry[1])=="boolean" ? 'checked' : 'value'}" class="w-full border rounded px-2 py-1">
-                                </div>
-                            `);
-            }
-        }, '');
+            return Object.entries(options_json).reduce((acc, entry) => {
+                let id = `${base_id}.${entry[0]}`;
+                if (typeof entry[1] === 'object') {
+                    return acc.concat(`
+                        <fieldset class="border border-gray-300 p-4 rounded-md">
+                            <legend class="text-lg font-bold">${entry[0]}</legend>
+                            ${renderOptionsHtml(id, entry[1])}
+                        </fieldset>
+                    `);
+                } else {
+                    return acc.concat(`
+                        <div>
+                            <label for="${id}" class="block">${entry[0]}</label>
+                            <input type="${dataType2inputType[typeof(entry[1])]}" id="${id}"  ${true===entry[1] ? 'checked' : ''} name="${entry[0]}" value="${entry[1]}" onchange="${id} = this.${typeof(entry[1])=="boolean" ? 'checked' : 'value'}" class="w-full border rounded px-2 py-1">
+                        </div>
+                    `);
+                }
+            }, '');
         }
+
         function renderOptions() {
             const element = document.getElementById('options-form');
             element.innerHTML = renderOptionsHtml('config.options', config.options);
