@@ -413,7 +413,7 @@
                 document.getElementById('current-time').textContent = date.toISOString().slice(0, -5);
                 // document.title = `RSI @${status.hostname} - Real Simple Irrigation`;
                 document.getElementById('rsi-link').textContent = `RSI_v${status.version}`
-                document.getElementById('rsi-link').href = `https://github.com/karpada/RSI/releases/tag/${status.version}`;
+                document.getElementById('rsi-link').href = `https://github.com/karpada/RSI/releases/tag/v${status.version}`;
                 document.getElementById('hostname').textContent = status.hostname;
                 document.getElementById('boardname').textContent = status.machine;
                 document.getElementById('boardname').href = `https://www.google.com/search?udm=2&as_q=pinout+${status.machine}`;
