@@ -312,7 +312,7 @@ async def schedule_irrigation():
 #########################
 # Configuration functions
 #########################
-def apply_config(new_config: dict) -> None:
+async def apply_config(new_config: dict) -> None:
     global config
     global schedule_completed_until
     global micropython_to_localtime
@@ -384,7 +384,7 @@ def apply_config(new_config: dict) -> None:
 
     # if zones changed, turn off all valves
     if config and config.get('zones', []) != normalized_config['zones']:
-        apply_valves(0)
+        await apply_valves(0)
 
     # log(None, None, f"apply_config({new_config})\n    normalized_config={normalized_config}")
     config = normalized_config
@@ -401,7 +401,7 @@ def read_soil_moisture_raw(zone_id: int) -> int:
         return None
     if 0 <= soil_moisture_config['power_pin_id']:
         Pin(soil_moisture_config['power_pin_id'], Pin.OUT).value(1)
-        asyncio.sleep(0.010)
+        time.sleep_ms(10)  # Use blocking sleep since this function is synchronous
     # https://docs.micropython.org/en/latest/esp32/quickref.html#adc-analog-to-digital-conversion
     adc = ADC(soil_moisture_config['adc_pin_id'], atten=ADC.ATTN_11DB)
     raw_reading = 0
@@ -456,9 +456,9 @@ async def read_http_headers(reader) -> dict:
     headers = {}
     while True:
         line = await reader.readline()
-        if line == b'\r\n':
+        if line == b'\r\n' or not line:
             break
-        name, value = line.decode().strip().split(': ')
+        name, value = line.decode().strip().split(': ', 1)
         headers[name.lower()] = value
     return headers
 
@@ -485,9 +485,9 @@ async def handle_request(reader, writer):
             writer.close()
             await writer.wait_closed()
             return
-        method, path, _ = req.split(' ')
-        path, query_params = path.split('?') if '?' in path else (path, None)
-        query_params = dict([param.replace('+', ' ').split('=') for param in query_params.split('&')]) if query_params else {}
+        method, path, _ = req.split(' ', 2)
+        path, query_params = path.split('?', 1) if '?' in path else (path, None)
+        query_params = dict([param.replace('+', ' ').split('=', 1) for param in query_params.split('&')]) if query_params else {}
 
         headers = await read_http_headers(reader)
         content_length = int(headers.get('content-length', '0'))
@@ -509,7 +509,7 @@ async def handle_request(reader, writer):
         elif method == 'POST' and path == '/config':
             body = ujson.loads((await reader.read(content_length)).decode()) if content_length > 0 else None
             # restore backup: jq . irrigation-config.json | curl -H "Content-Type: application/json" -X POST --data-binary @- http://192.168.68.ESP/config
-            apply_config(body)
+            await apply_config(body)
             response = ujson.dumps(config)
             save_as_json('config.json', config)
         elif method == 'PUT' and path == '/pause':
@@ -586,7 +586,7 @@ async def handle_request(reader, writer):
     if filename:
         await serve_file(filename, writer)
     else:
-        writer.write(response)
+        writer.write(response.encode('utf-8'))
     await writer.drain()
     writer.close()
     await writer.wait_closed()
@@ -654,7 +654,7 @@ async def main():
     if bootstrap.button_pin_id >= 0:
         await wait_for_wifi_setup(bootstrap.button_pin_id, 1)
 
-    apply_config(load_from_json('config.json') or {})
+    await apply_config(load_from_json('config.json') or {})
 
     # set valve_status = 0b1111...1 so that the first apply_valves will turn off all valves
     valve_status = (1<<len(config['zones']))-1
