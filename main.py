@@ -775,6 +775,7 @@ async def handle_request(reader, writer):
                         for i, z in enumerate(config["zones"])
                         if z["adc_pin_id"] >= 0 and not z["master"]
                     },
+                    "machine": sys.implementation._machine,
                     "gc.mem_alloc": mem_alloc(),
                     "gc.mem_free": mem_free(),
                     "valve_status": f"{valve_status:08b}",
@@ -915,14 +916,16 @@ async def main():
         BoardBootstrap("ESP32S3", 0, 44),  # blue
         BoardBootstrap("ESP8266", -1, 2),
         BoardBootstrap("S2_MINI", 0, 15),
+        BoardBootstrap("ESP32S2", 0, 15),
         BoardBootstrap("ESP32C3", 9, 8),
+        BoardBootstrap("UNKNOWN", -1, -1),
     ]:
         if bootstrap.name in sys.implementation._machine:
             break
     info(
         None,
         None,
-        f"Starting irrigation-esp32 on [{sys.implementation._machine}] detected as {bootstrap}",
+        f"Starting RSI on [{sys.implementation._machine}] detected as {bootstrap}",
     )
     heartbeat_pin_id = bootstrap.heartbeat_pin_id
 
