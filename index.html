@@ -37,6 +37,11 @@
             padding: 1rem;
         }
 
+        .px-1 {
+            padding-left: 0.25rem;
+            padding-right: 0.25rem;
+        }
+
         .px-2 {
             padding-left: 0.5rem;
             padding-right: 0.5rem;
@@ -200,14 +205,6 @@
             transition: max-height 0.3s ease-out;
         }
 
-        td.narrow {
-            width: 20px;
-        }
-
-        input.narrow {
-            width: 40px;
-        }
-
         .weekDays-selector {
             width: 170px;
             justify-content: space-between;
@@ -258,6 +255,17 @@
 
         button:hover {
             opacity: 0.9;
+        }
+
+        /* inputs in table cells should have no border and no padding */
+        td > input[type="text"],
+        td > input[type="number"],
+        td > input[type="time"],
+        td > input[type="datetime-local"],
+        td > select {
+            width: 100%;
+            padding: 0rem;
+            border: none;
         }
 
         /* Input styles */
@@ -461,17 +469,17 @@
                     <tbody>
                         ${config.zones.map((zone, index) => `
                             <tr id="zone${index}">
-                                <td class="border px-4 py-2"><input type="text" value="${zone.name}" onchange="updateZone(${index}, 'name', this.value)"></td>
-                                <td class="border px-4 py-2 narrow"><input type="checkbox" ${zone.master ? 'checked' : ''} onchange="updateZone(${index}, 'master', this.checked)" class="w-4 h-4"></td>
-                                <td class="border px-4 py-2 narrow"><input type="checkbox" ${zone.active_is_high ? 'checked' : ''} onchange="updateZone(${index}, 'active_is_high', this.checked)" class="w-4 h-4"></td>
-                                <td class="border px-4 py-2 narrow"><input class="narrow" type="number" value="${zone.on_pin}" onchange="updateZone(${index}, 'on_pin', this.value)"></td>
-                                <td class="border px-4 py-2 narrow"><input class="narrow" type="number" value="${zone.off_pin}" onchange="updateZone(${index}, 'off_pin', this.value)"></td>
-                                <td class="border px-4 py-2 narrow"><input class="narrow" type="number" value="${zone.irrigation_factor_override}" onchange="updateZone(${index}, 'irrigation_factor_override', this.value)"></td>
-                                <td class="border px-4 py-2 narrow"><input class="narrow" type="number" value="${zone.soil_moisture_dry}" onchange="updateZone(${index}, 'soil_moisture_dry', this.value)"></td>
-                                <td class="border px-4 py-2 narrow"><input class="narrow" type="number" value="${zone.soil_moisture_wet}" onchange="updateZone(${index}, 'soil_moisture_wet', this.value)"></td>
-                                <td class="border px-4 py-2 narrow"><input class="narrow" type="number" value="${zone.adc_pin_id}" onchange="updateZone(${index}, 'adc_pin_id', this.value)"></td>
-                                <td class="border px-4 py-2 narrow"><input class="narrow" type="number" value="${zone.power_pin_id}" onchange="updateZone(${index}, 'power_pin_id', this.value)"></td>
-                                <td class="border px-4 py-2"><button onclick="removeZone(${index})" class="bg-red-500 text-white px-2 py-1 rounded">Remove</button></td>
+                                <td class="border px-1 py-1" width="300em"><input type="text" value="${zone.name}" onchange="updateZone(${index}, 'name', this.value)"></td>
+                                <td class="border px-1 py-1"><input type="checkbox" ${zone.master ? 'checked' : ''} onchange="updateZone(${index}, 'master', this.checked)" class="w-4 h-4"></td>
+                                <td class="border px-1 py-1"><input type="checkbox" ${zone.active_is_high ? 'checked' : ''} onchange="updateZone(${index}, 'active_is_high', this.checked)" class="w-4 h-4"></td>
+                                <td class="border px-1 py-1"><input type="number" value="${zone.on_pin}" onchange="updateZone(${index}, 'on_pin', this.value)"></td>
+                                <td class="border px-1 py-1"><input type="number" value="${zone.off_pin}" onchange="updateZone(${index}, 'off_pin', this.value)"></td>
+                                <td class="border px-1 py-1"><input type="number" value="${zone.irrigation_factor_override}" onchange="updateZone(${index}, 'irrigation_factor_override', this.value)"></td>
+                                <td class="border px-1 py-1"><input type="number" value="${zone.soil_moisture_dry}" onchange="updateZone(${index}, 'soil_moisture_dry', this.value)"></td>
+                                <td class="border px-1 py-1"><input type="number" value="${zone.soil_moisture_wet}" onchange="updateZone(${index}, 'soil_moisture_wet', this.value)"></td>
+                                <td class="border px-1 py-1"><input type="number" value="${zone.adc_pin_id}" onchange="updateZone(${index}, 'adc_pin_id', this.value)"></td>
+                                <td class="border px-1 py-1"><input type="number" value="${zone.power_pin_id}" onchange="updateZone(${index}, 'power_pin_id', this.value)"></td>
+                                <td class="border px-1 py-1"><button onclick="removeZone(${index})" class="bg-red-500 text-white px-2 py-1 rounded">Remove</button></td>
                             </tr>
                         `).join('')}
                     </tbody>
@@ -500,27 +508,27 @@
                     <tbody>
                         ${config.schedules.map((schedule, index) => `
                             <tr id="schedule${index}">
-                                <td class="border px-4 py-2">
+                                <td class="border px-1 py-1" width="300em">
                                     <select onchange="updateSchedule(${index}, 'zone_id', Number(this.value))">
                                         ${config.zones.map((zone, zoneIndex) => `
                                             <option value=${zoneIndex} ${schedule.zone_id === zoneIndex ? 'selected' : ''} ${config.zones[zoneIndex].master ? 'disabled' : ''}>${zone.name}</option>
                                         `).join('')}
                                     </select>
                                 </td>
-                                <td class="border px-4 py-2"><input type="time" value="${String(Math.floor(schedule.start_sec / 3600)).padStart(2, "0")}:${String(Math.floor(schedule.start_sec/60) % 60).padStart(2, "0")}" onchange="updateSchedule(${index}, 'start_sec', this.value)"></td>
-                                <td class="border px-4 py-2 narrow"><input class="narrow" type="number" value="${Math.round(schedule.duration_sec/6)/10}" onchange="updateSchedule(${index}, 'duration_sec', this.value*60)"></td>
-                                <td class="border px-4 py-2 narrow"><input type="checkbox" ${schedule.enabled ? 'checked' : ''} onchange="updateSchedule(${index}, 'enabled', this.checked)" class="w-4 h-4"></td>
-                                <td class="border px-4 py-2 weekDays-selector">
+                                <td class="border px-1 py-1"><input type="time" value="${String(Math.floor(schedule.start_sec / 3600)).padStart(2, "0")}:${String(Math.floor(schedule.start_sec/60) % 60).padStart(2, "0")}" onchange="updateSchedule(${index}, 'start_sec', this.value)"></td>
+                                <td class="border px-1 py-1"><input type="number" value="${Math.round(schedule.duration_sec/6)/10}" onchange="updateSchedule(${index}, 'duration_sec', this.value*60)"></td>
+                                <td class="border px-1 py-1"><input type="checkbox" ${schedule.enabled ? 'checked' : ''} onchange="updateSchedule(${index}, 'enabled', this.checked)" class="w-4 h-4"></td>
+                                <td class="border px-2 py-2 weekDays-selector">
                                     ${'MTWTFSS'.split('').map((day_label, day_index) => `
                                         <input type="checkbox" ${schedule.day_mask&1<<day_index ? 'checked' : ''} onchange="updateSchedule(${index}, 'day_mask${day_index}', this.checked)" id="schedule${index}-weekday${day_index}" class="weekday" />
                                         <label for="schedule${index}-weekday${day_index}">${day_label}</label>
                                     `).join('')}
                                 </td>
-                                <td class="border px-4 py-2 narrow"><input type="checkbox" ${schedule.enable_soil_moisture_sensor ? 'checked' : ''} onchange="updateSchedule(${index}, 'enable_soil_moisture_sensor', this.checked)" class="w-4 h-4"></td>
-                                <td class="border px-4 py-2 narrow"><input class="narrow" type="number" value="${schedule.interval_duration_sec}" onchange="updateSchedule(${index}, 'interval_duration_sec', this.value)"></td>
-                                <td class="border px-4 py-2 narrow"><input class="narrow" type="number" value="${schedule.interval_on_sec}" onchange="updateSchedule(${index}, 'interval_on_sec', this.value)"></td>
-                                <td class="border px-4 py-2"><input type="datetime-local" value="${schedule.expiry ? new Date(schedule.expiry * 1000).toISOString().slice(0, 16) : ""}" onchange="updateSchedule(${index}, 'expiry', this.value ? new Date(this.value).getTime() / 1000 : 0)"></td>
-                                <td class="border px-4 py-2"><button onclick="removeSchedule(${index})" class="bg-red-500 text-white px-2 py-1 rounded">Remove</button></td>
+                                <td class="border px-1 py-1"><input type="checkbox" ${schedule.enable_soil_moisture_sensor ? 'checked' : ''} onchange="updateSchedule(${index}, 'enable_soil_moisture_sensor', this.checked)" class="w-4 h-4"></td>
+                                <td class="border px-1 py-1"><input type="number" value="${schedule.interval_duration_sec}" onchange="updateSchedule(${index}, 'interval_duration_sec', this.value)"></td>
+                                <td class="border px-1 py-1"><input type="number" value="${schedule.interval_on_sec}" onchange="updateSchedule(${index}, 'interval_on_sec', this.value)"></td>
+                                <td class="border px-1 py-1"><input type="datetime-local" value="${schedule.expiry ? new Date(schedule.expiry * 1000).toISOString().slice(0, 16) : ""}" onchange="updateSchedule(${index}, 'expiry', this.value ? new Date(this.value).getTime() / 1000 : 0)"></td>
+                                <td class="border px-1 py-1"><button onclick="removeSchedule(${index})" class="bg-red-500 text-white px-2 py-1 rounded">Remove</button></td>
                             </tr>
                         `).join('')}
                     </tbody>
