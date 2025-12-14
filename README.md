@@ -171,9 +171,16 @@ Advanced settings for time synchronization when NTP is unavailable (uses MCU tem
 - **Save As**: Download the configuration as a JSON file for backup
 - **Open**: Upload a previously saved configuration file
 
-## Updating the Code
+## Uploading a new version
+Below example uploads latest version, to upload a specific version use a tag, e.g. `VERSION="v1.2.3"`:
 ```shell
-$ HOST=s2demo.local
-$ for f in index.html setup.html main.py; do curl -X POST --data-binary @$f $HOST/file/$f | jq; done && curl -X PUT $HOST/reboot
-$ curl ${HOST}/status | jq
+$ HOST="s2demo.local"
+$ VERSION="origin/main"
+$ for f in index.html setup.html main.py; do git cat-file -p $VERSION:$f | curl -X POST --data-binary @- $HOST/file/$f | jq; done
+$ curl -X PUT $HOST/reboot
+$ curl $HOST/status | jq
+```
+Upload from local dir (one-liner):
+```shell
+$ HOST="s2demo.local" && for f in index.html setup.html main.py; do curl -X POST --data-binary @$f $HOST/file/$f | jq; done && curl -X PUT $HOST/reboot && curl $HOST/status | jq
 ```
