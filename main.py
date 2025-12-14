@@ -28,6 +28,7 @@ config: dict = None
 valve_status: int = 0
 schedule_status: int = 0
 heartbeat_pin_id: int = -1
+heartbeat_high_is_on: bool = True
 schedule_completed_until = []
 ad_hoc_irrigation_until = {}
 
@@ -294,7 +295,7 @@ async def schedule_irrigation():
     await asyncio.sleep(5)
     while True:
         if heartbeat_pin_id > 0:
-            Pin(heartbeat_pin_id, Pin.OUT).on()
+            Pin(heartbeat_pin_id, Pin.OUT).value(1 if heartbeat_high_is_on else 0)
 
         local_timestamp = get_local_timestamp()
 
@@ -541,6 +542,9 @@ async def apply_config(new_config: dict) -> None:
             "relay_pin_id": int(bo["settings"].get("relay_pin_id", -1)),
             "heartbeat_pin_id": int(
                 bo["settings"].get("heartbeat_pin_id", heartbeat_pin_id)
+            ),
+            "heartbeat_high_is_on": bool(
+                bo["settings"].get("heartbeat_high_is_on", heartbeat_high_is_on)
             ),
             "relay_active_is_high": bool(
                 bo["settings"].get("relay_active_is_high", False)
@@ -907,20 +911,21 @@ async def wait_for_wifi_setup(button_pin_id: int, wait_time: int) -> None:
 async def main():
     global valve_status
     global heartbeat_pin_id
+    global heartbeat_high_is_on
 
     if sys.maxsize >> 30 == 0:
         warn(None, None, ">>> We have less than 31 bits :(")
 
     BoardBootstrap = namedtuple(
-        "BoardBootstrap", ["name", "button_pin_id", "heartbeat_pin_id"]
+        "BoardBootstrap", ["name", "button_pin_id", "heartbeat_pin_id", "heartbeat_high_is_on"]
     )
     for bootstrap in [
-        BoardBootstrap("ESP32S3", 0, 44),  # blue
-        BoardBootstrap("ESP8266", -1, 2),
-        BoardBootstrap("S2_MINI", 0, 15),
-        BoardBootstrap("ESP32S2", 0, 15),
-        BoardBootstrap("ESP32C3", 9, 8),
-        BoardBootstrap("UNKNOWN", -1, -1),
+        BoardBootstrap("ESP32S3", 0, 44, True),  # blue
+        BoardBootstrap("ESP8266", -1, 2, True),
+        BoardBootstrap("S2_MINI", 0, 15, True),
+        BoardBootstrap("ESP32S2", 0, 15, True),
+        BoardBootstrap("ESP32C3", 9, 8, False),
+        BoardBootstrap("UNKNOWN", -1, -1, True),
     ]:
         if bootstrap.name in sys.implementation._machine:
             break
@@ -930,6 +935,7 @@ async def main():
         f"Starting RSI on [{sys.implementation._machine}] detected as {bootstrap}",
     )
     heartbeat_pin_id = bootstrap.heartbeat_pin_id
+    heartbeat_high_is_on = bootstrap.heartbeat_high_is_on
 
     freq(80_000_000)
 
