@@ -621,7 +621,6 @@ def get_soil_moisture_milli(zone_id: int, raw_reading: int = None) -> int:
 
 async def store_file(reader, length: int, filename: str) -> None:
     try:
-        start_time = time.ticks_ms()
         buf = memoryview(bytearray(1024))
         with open("upload.tmp", "wb") as f:
             while length:
@@ -629,11 +628,6 @@ async def store_file(reader, length: int, filename: str) -> None:
                 f.write(buf[:chunk_length])
                 length -= chunk_length
         rename("upload.tmp", filename)
-        info(
-            None,
-            None,
-            f"Stored [{filename}] (stat={stat(filename)}) in {time.ticks_ms() - start_time}ms",
-        )
     except Exception as e:
         error(None, None, f"Error storing [{filename}]: {e}")
         raise
@@ -641,12 +635,10 @@ async def store_file(reader, length: int, filename: str) -> None:
 
 async def serve_file(filename: str, writer) -> None:
     try:
-        start_time = time.ticks_ms()
         buf = memoryview(bytearray(128))
         with open(filename, "rb") as f:
             while length := f.readinto(buf):
                 writer.write(buf[:length])
-        debug(None, None, f"Served [{filename}] in {time.ticks_ms() - start_time}ms")
     except Exception as e:
         error(None, None, f"Error serving [{filename}]: {e}")
         raise
@@ -683,6 +675,8 @@ async def handle_request(reader, writer):
 
     try:
         req = (await reader.readline()).decode().lstrip()
+        req_start_time = time.ticks_ms()
+
         if not req:
             writer.close()
             await writer.wait_closed()
@@ -706,7 +700,7 @@ async def handle_request(reader, writer):
         debug(
             None,
             None,
-            f"Request: {method:4} {path:14} query_params={query_params}, (content_length={content_length})",
+            f"Processing request: {method:4} {path:14} query_params={query_params}, (content_length={content_length})",
         )  #     headers={headers}")
 
         reboot = False
@@ -856,6 +850,7 @@ async def handle_request(reader, writer):
     await writer.drain()
     writer.close()
     await writer.wait_closed()
+    debug(None, None, f"Handled Request: {method:4} {path:14} in {time.ticks_ms() - req_start_time}ms")
 
     if reboot:
         info(None, None, "Restarting...")
