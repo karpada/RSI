@@ -917,7 +917,8 @@ async def main():
         warn(None, None, ">>> We have less than 31 bits :(")
 
     BoardBootstrap = namedtuple(
-        "BoardBootstrap", ["name", "button_pin_id", "heartbeat_pin_id", "heartbeat_high_is_on"]
+        "BoardBootstrap",
+        ["name", "button_pin_id", "heartbeat_pin_id", "heartbeat_high_is_on"],
     )
     for bootstrap in [
         BoardBootstrap("ESP32S3", 0, 44, True),  # blue
