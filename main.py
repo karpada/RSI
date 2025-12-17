@@ -13,7 +13,7 @@ from uos import rename, stat
 from machine import RTC
 
 # Global variables
-VERSION = "0.0.12"  # DO NOT EDIT: This line is automatically updated by the version-bump workflow
+VERSION = "0.0.13"  # DO NOT EDIT: This line is automatically updated by the version-bump workflow
 MICROPYTHON_TO_TIMESTAMP: int = 946684800  # 2000-1970 --> 3155673600 - 2208988800
 TIMESTAMP_2001_01_01: int = (
     978307200  # Monday, This is the date used when ntp is not available
@@ -850,7 +850,11 @@ async def handle_request(reader, writer):
     await writer.drain()
     writer.close()
     await writer.wait_closed()
-    debug(None, None, f"Handled Request: {method:4} {path:14} in {time.ticks_ms() - req_start_time}ms")
+    debug(
+        None,
+        None,
+        f"Handled Request: {method:4} {path:14} in {time.ticks_ms() - req_start_time}ms",
+    )
 
     if reboot:
         info(None, None, "Restarting...")
