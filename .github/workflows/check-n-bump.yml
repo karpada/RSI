@@ -1,0 +1,102 @@
+name: Lint, Spell Check & Version Bump
+
+on:
+  push:
+    branches:
+      - '*'
+    paths-ignore:
+      - '**.md'
+  workflow_dispatch:
+    inputs:
+      version_type:
+        description: 'Version bump type'
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+        default: patch
+
+jobs:
+  check-n-bump:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Codespell
+        id: codespell
+        run: |
+          # codespell version should be kept in sync with .pre-commit-config.yml
+          pip install --user codespell==2.4.1 tomli
+          codespell --write-changes main.py
+          git status --porcelain && echo "codespell_fixed=[main.py]" >> $GITHUB_OUTPUT
+
+      - name: Ruff
+        id: ruff
+        run: |
+          # ruff version should be kept in sync with .pre-commit-config.yml
+          pip install --user ruff==0.11.6
+          ruff check --output-format=github main.py
+          ruff check --fix --exit-non-zero-on-fix main.py || echo "ruff_check_fixed=[main.py]" >> $GITHUB_OUTPUT
+          ruff format --exit-non-zero-on-format main.py || echo "ruff_format_fixed=[main.py]" >> $GITHUB_OUTPUT
+
+      - name: Calc Next Version
+        id: bump
+        run: |
+          CURRENT_VERSION="$(sed -n -e's/^VERSION *= *"\([^"]*\)".*$/\1/p' main.py || echo 0.0.0)"
+          echo "Current version: $CURRENT_VERSION"
+
+          IFS='.' read -r -a VERSION_PARTS <<< "$CURRENT_VERSION"
+          MAJOR="${VERSION_PARTS[0]}"
+          MINOR="${VERSION_PARTS[1]}"
+          PATCH="${VERSION_PARTS[2]}"
+
+          case "${{ github.event.inputs.version_type || 'patch' }}" in
+            major)
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+              ;;
+            minor)
+              MINOR=$((MINOR + 1))
+              PATCH=0
+              ;;
+            patch)
+              PATCH=$((PATCH + 1))
+              ;;
+          esac
+
+          NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          echo "$NEW_VERSION" > VERSION
+          # Update main.py for runtime access
+          sed -i -e"s/^VERSION *= *\".*$/VERSION = \"${NEW_VERSION}\"  # DO NOT EDIT: This line is automatically updated by the version-bump workflow/" main.py
+          echo "Bumped version: $CURRENT_VERSION -> $NEW_VERSION"
+
+          echo "current=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "new=$NEW_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create tag and commit
+        # if branch is main and the not a Pull Request
+        if: github.ref == 'refs/heads/main' && needs.pr-check.outputs.number == 'null' 
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          CURRENT_VERSION="${{ steps.bump.outputs.current }}"
+          NEW_VERSION="${{ steps.bump.outputs.new }}"
+
+          CODESPELL_FIXED="${{ steps.codespell.outputs.codespell_fixed }}"
+          RUFF_CHECK_FIXED="${{ steps.ruff.outputs.ruff_check_fixed }}"
+          RUFF_FORMAT_FIXED="${{ steps.ruff.outputs.ruff_format_fixed }}"
+
+          git add main.py
+
+          git commit -m "Bumped version: $CURRENT_VERSION -> $NEW_VERSION ($CODESPELL_FIXED $RUFF_CHECK_FIXED $RUFF_FORMAT_FIXED)" || exit 0
+          git tag -a "v${NEW_VERSION}" -m "Release v${NEW_VERSION}"
+          git push origin main
+          git push origin "v${NEW_VERSION}"
