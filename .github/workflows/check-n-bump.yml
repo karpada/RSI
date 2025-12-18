@@ -40,7 +40,7 @@ jobs:
         id: ruff
         run: |
           # ruff version should be kept in sync with .pre-commit-config.yml
-          pip install --user ruff==0.11.6
+          pip install --user ruff==0.14.9
           ruff check --fix --exit-non-zero-on-fix main.py || echo "ruff_check_fixed=[main.py]" >> $GITHUB_OUTPUT
           ruff format --exit-non-zero-on-format main.py || echo "ruff_format_fixed=[main.py]" >> $GITHUB_OUTPUT
 
