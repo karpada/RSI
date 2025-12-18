@@ -92,6 +92,7 @@ jobs:
           RUFF_CHECK_FIXED="${{ steps.ruff.outputs.ruff_check_fixed }}"
           RUFF_FORMAT_FIXED="${{ steps.ruff.outputs.ruff_format_fixed }}"
 
+          git diff
           git add main.py
 
           git commit -m "Bumped version: $CURRENT_VERSION -> $NEW_VERSION, Fixes: (${CODESPELL_FIXED:+CodeSpell }${RUFF_CHECK_FIXED:+RuffCheck }${RUFF_FORMAT_FIXED:+RuffFormat })" || exit 0
