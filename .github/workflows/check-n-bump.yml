@@ -34,14 +34,13 @@ jobs:
           # codespell version should be kept in sync with .pre-commit-config.yml
           pip install --user codespell==2.4.1 tomli
           codespell --write-changes main.py
-          git status --porcelain && echo "codespell_fixed=[main.py]" >> $GITHUB_OUTPUT
+          git diff-index --quiet HEAD || echo "codespell_fixed=[main.py]" >> $GITHUB_OUTPUT
 
       - name: Ruff
         id: ruff
         run: |
           # ruff version should be kept in sync with .pre-commit-config.yml
           pip install --user ruff==0.11.6
-          ruff check --output-format=github main.py
           ruff check --fix --exit-non-zero-on-fix main.py || echo "ruff_check_fixed=[main.py]" >> $GITHUB_OUTPUT
           ruff format --exit-non-zero-on-format main.py || echo "ruff_format_fixed=[main.py]" >> $GITHUB_OUTPUT
 
@@ -96,7 +95,7 @@ jobs:
 
           git add main.py
 
-          git commit -m "Bumped version: $CURRENT_VERSION -> $NEW_VERSION ($CODESPELL_FIXED $RUFF_CHECK_FIXED $RUFF_FORMAT_FIXED)" || exit 0
+          git commit -m "Bumped version: $CURRENT_VERSION -> $NEW_VERSION (${CODESPELL_FIXED:+CodeSpell} ${RUFF_CHECK_FIXED:+RuffCheck} ${RUFF_FORMAT_FIXED:+RuffFormat})" || exit 0
           git tag -a "v${NEW_VERSION}" -m "Release v${NEW_VERSION}"
           git push origin main
           git push origin "v${NEW_VERSION}"
