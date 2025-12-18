@@ -777,7 +777,7 @@ async def handle_request(reader, writer):
                     },
                     "machine": sys.implementation._machine,
                     "gc.mem_alloc": mem_alloc(),
-                    "gc.mem_free": mem_free(),
+                    # "gc.mem_free": mem_free(),
                     "valve_status": f"{valve_status:08b}",
                     "schedule_status": f"{schedule_status:08b}",
                     "mcu_temperature": mcu_temperature(),
