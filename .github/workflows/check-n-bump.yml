@@ -81,7 +81,6 @@ jobs:
 
       - name: Create tag and commit
         # if branch is main and the not a Pull Request
-        if: ${{ github.ref == 'refs/heads/main' }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -97,5 +96,10 @@ jobs:
 
           git commit -m "Bumped version: $CURRENT_VERSION -> $NEW_VERSION, Fixes: (${CODESPELL_FIXED:+CodeSpell }${RUFF_CHECK_FIXED:+RuffCheck }${RUFF_FORMAT_FIXED:+RuffFormat })" || exit 0
           git tag -a "v${NEW_VERSION}" -m "Release v${NEW_VERSION}"
-          git push origin main
-          git push origin "v${NEW_VERSION}"
+
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+              git push origin main
+              git push origin "v${NEW_VERSION}"
+          else
+              echo "Not on main branch, skipping tag and push."
+          fi
