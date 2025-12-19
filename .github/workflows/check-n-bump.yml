@@ -104,3 +104,9 @@ jobs:
           else
               echo "Not on main branch, skipping tag and push."
           fi
+
+      - name: Verify no lingering issues
+        run: |
+          codespell .
+          ruff check --output-format=github .
+          ruff format --diff .
