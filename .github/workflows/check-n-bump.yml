@@ -95,7 +95,7 @@ jobs:
           git diff
           git add main.py
 
-          git commit -m "Bumped version: $CURRENT_VERSION -> $NEW_VERSION, Fixes: (${CODESPELL_FIXED:+CodeSpell }${RUFF_CHECK_FIXED:+RuffCheck }${RUFF_FORMAT_FIXED:+RuffFormat })" || exit 0
+          git commit -m "Bumped version: $CURRENT_VERSION -> $NEW_VERSION, AutomatedFixes: (${CODESPELL_FIXED:+CodeSpell }${RUFF_CHECK_FIXED:+RuffCheck }${RUFF_FORMAT_FIXED:+RuffFormat })" || exit 0
           git tag -a "v${NEW_VERSION}" -m "Release v${NEW_VERSION}"
 
           if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
