@@ -6,17 +6,6 @@ on:
       - '*'
     paths-ignore:
       - '**.md'
-  workflow_dispatch:
-    inputs:
-      version_type:
-        description: 'Version bump type'
-        required: true
-        type: choice
-        options:
-          - patch
-          - minor
-          - major
-        default: patch
 
 jobs:
   check-n-bump:
