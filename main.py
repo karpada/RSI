@@ -621,9 +621,9 @@ def get_soil_moisture_milli(zone_id: int, raw_reading: int = None) -> int:
 
 async def store_file(reader, length: int, filename: str) -> None:
     try:
-        buf = memoryview(bytearray(1024))
+        buf = memoryview(bytearray(512))
         with open("upload.tmp", "wb") as f:
-            while length:
+            while length > 0:
                 chunk_length = await reader.readinto(buf)
                 f.write(buf[:chunk_length])
                 length -= chunk_length
@@ -635,10 +635,11 @@ async def store_file(reader, length: int, filename: str) -> None:
 
 async def serve_file(filename: str, writer) -> None:
     try:
-        buf = memoryview(bytearray(128))
+        buf = memoryview(bytearray(512))
         with open(filename, "rb") as f:
-            while length := f.readinto(buf):
+            while (length := f.readinto(buf)) > 0:
                 writer.write(buf[:length])
+                await writer.drain()
     except Exception as e:
         error(None, None, f"Error serving [{filename}]: {e}")
         raise
