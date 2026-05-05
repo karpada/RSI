@@ -90,6 +90,7 @@ async def connect_wifi() -> None:
             return
         network.hostname(config["options"]["wifi"]["hostname"])
         wlan.active(True)
+        wlan.config(pm = wlan.PM_POWERSAVE if config["options"]["settings"]["enable_power_saving_mode"] else wlan.PM_PERFORMANCE)
         info(None, None, "Wifi connecting...")
         wlan.connect(
             config["options"]["wifi"]["ssid"], config["options"]["wifi"]["password"]
@@ -583,14 +584,9 @@ async def apply_config(new_config: dict) -> None:
         [i for i in LOG if i.level >= config["options"]["log"]["level"]],
         config["options"]["log"]["max_lines"],
     )
-    if config["options"]["settings"]["enable_power_saving_mode"]:
-        wlan.config(
-            pm=wlan.PM_POWERSAVE
-        )  # FIXME: Throws exception on some boards, needs more investigation
-        freq(80_000_000)
-    else:
-        wlan.config(pm=wlan.PM_PERFORMANCE)
-        freq(DEFAULT_FREQ)
+    freq(80_000_000 if config["options"]["settings"]["enable_power_saving_mode"] else DEFAULT_FREQ)
+    if wlan.active():
+        wlan.config(pm = wlan.PM_POWERSAVE if config["options"]["settings"]["enable_power_saving_mode"] else wlan.PM_PERFORMANCE)
 
 
 def read_soil_moisture_raw(zone_id: int) -> int:
