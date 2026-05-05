@@ -4,8 +4,7 @@ on:
   push:
     branches:
       - '*'
-    paths-ignore:
-      - '**.md'
+    paths-ignore: []
 
 jobs:
   check-n-bump:
