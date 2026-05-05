@@ -3,14 +3,13 @@ from collections import namedtuple, deque
 from gc import mem_alloc, mem_free
 import network
 import utime as time
-from machine import Pin, ADC, PWM, reset, freq
+from machine import RTC, Pin, ADC, PWM, reset, freq
 from esp32 import mcu_temperature
 import ujson
 from ntptime import settime
 import uasyncio as asyncio
 import urequests as requests
 from uos import rename, stat
-from machine import RTC
 
 # Global variables
 VERSION = "v0.1.0"  # DO NOT EDIT: This line is automatically updated by the version-bump workflow
@@ -21,6 +20,7 @@ TIMESTAMP_2001_01_01: int = (
 TIMESTAMP_2025_01_01: int = (
     1735689600  # after ntp sync, date will be at least 2025-01-01
 )
+DEFAULT_FREQ = freq()
 WIFI_SETUP_MODE = False
 micropython_to_localtime: int = 0
 wlan: network.WLAN = network.WLAN(network.STA_IF)
@@ -549,6 +549,9 @@ async def apply_config(new_config: dict) -> None:
             "relay_active_is_high": bool(
                 bo["settings"].get("relay_active_is_high", False)
             ),
+            "enable_power_saving_mode": bool(
+                bo["settings"].get("enable_power_saving_mode", False)
+            ),
         },
         "log": {
             "level": int(bo["log"].get("level", 20)),
@@ -580,6 +583,12 @@ async def apply_config(new_config: dict) -> None:
         [i for i in LOG if i.level >= config["options"]["log"]["level"]],
         config["options"]["log"]["max_lines"],
     )
+    if config["options"]["settings"]["enable_power_saving_mode"]:
+        wlan.config(pm=wlan.PM_POWERSAVE) # FIXME: Throws exception on some boards, needs more investigation
+        freq(80_000_000)
+    else:
+        wlan.config(pm=wlan.PM_PERFORMANCE)
+        freq(DEFAULT_FREQ)
 
 
 def read_soil_moisture_raw(zone_id: int) -> int:
@@ -937,8 +946,6 @@ async def main():
     )
     heartbeat_pin_id = bootstrap.heartbeat_pin_id
     heartbeat_high_is_on = bootstrap.heartbeat_high_is_on
-
-    freq(80_000_000)
 
     if bootstrap.button_pin_id >= 0:
         await wait_for_wifi_setup(bootstrap.button_pin_id, 1)
