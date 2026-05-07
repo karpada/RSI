@@ -71,8 +71,9 @@ def error(zone_id: int, schedule_id: int, message: str) -> None:
 # Persistent storage functions
 def save_as_json(filename: str, data: dict) -> None:
     info(None, None, f"Saving data to {filename}")
-    with open(filename, "w", encoding="utf-8") as f:
+    with open(f"{filename}.tmp", "w", encoding="utf-8") as f:
         ujson.dump(data, f)
+    rename(f"{filename}.tmp", filename)
 
 
 def load_from_json(filename: str) -> dict:
