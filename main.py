@@ -539,7 +539,7 @@ async def apply_config(new_config: dict) -> None:
         },
         "soil_moisture_sensor": {
             "high_is_dry": bool(bo["soil_moisture_sensor"].get("high_is_dry", True)),
-            "sample_count": int(bo["soil_moisture_sensor"].get("sample_count", 3)),
+            "sample_count": max(int(bo["soil_moisture_sensor"].get("sample_count", 3)), 1),
         },
         "settings": {
             "enable_irrigation_schedule": bool(
