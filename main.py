@@ -473,6 +473,7 @@ async def apply_config(new_config: dict) -> None:
     global schedule_completed_until
     global micropython_to_localtime
     global heartbeat_pin_id
+    global heartbeat_high_is_on
     global LOG
 
     info(None, None, f"Applying new config = {new_config}")
