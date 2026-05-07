@@ -583,6 +583,7 @@ async def apply_config(new_config: dict) -> None:
         config["options"]["settings"]["timezone_offset"] * 3600
     )
     heartbeat_pin_id = config["options"]["settings"]["heartbeat_pin_id"]
+    heartbeat_high_is_on = config["options"]["settings"]["heartbeat_high_is_on"]
     # disable schedules until fallback_time_sync or NTP synchronization is complete
     schedule_completed_until = [TIMESTAMP_2001_01_01] * len(config["schedules"])
     LOG = deque(
