@@ -9,7 +9,7 @@ import ujson
 from ntptime import settime
 import uasyncio as asyncio
 import urequests as requests
-from uos import rename, stat
+from uos import rename, remove, stat
 
 # Global variables
 VERSION = "v1.1.1"  # DO NOT EDIT: This line is automatically updated by the version-bump workflow
@@ -639,16 +639,28 @@ def get_soil_moisture_milli(zone_id: int, raw_reading: int = None) -> int:
 
 
 async def store_file(reader, length: int, filename: str) -> None:
+    tmp_filename = f"upload-{time.ticks_ms()}-{id(reader)}.tmp"
+    received = 0
     try:
         buf = memoryview(bytearray(512))
-        with open("upload.tmp", "wb") as f:
-            while length > 0:
+        with open(tmp_filename, "wb") as f:
+            while received < length:
                 chunk_length = await reader.readinto(buf)
+                if chunk_length == 0:
+                    break
                 f.write(buf[:chunk_length])
-                length -= chunk_length
-        rename("upload.tmp", filename)
+                received += chunk_length
+        if received != length:
+            raise OSError(
+                f"Incomplete upload for {filename}: expected {length} bytes, received {received} bytes"
+            )
+        rename(tmp_filename, filename)
     except Exception as e:
         error(None, None, f"Error storing [{filename}]: {e}")
+        try:
+            remove(tmp_filename)
+        except Exception:
+            pass
         raise
 
 
