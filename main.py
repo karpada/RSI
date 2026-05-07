@@ -12,7 +12,7 @@ import urequests as requests
 from uos import rename, remove, stat
 
 # Global variables
-VERSION = "v1.1.5"  # DO NOT EDIT: This line is automatically updated by the version-bump workflow
+VERSION = "v1.1.6"  # DO NOT EDIT: This line is automatically updated by the version-bump workflow
 MICROPYTHON_TO_TIMESTAMP: int = 946684800  # 2000-1970 --> 3155673600 - 2208988800
 TIMESTAMP_2001_01_01: int = (
     978307200  # Monday, This is the date used when ntp is not available
@@ -539,7 +539,9 @@ async def apply_config(new_config: dict) -> None:
         },
         "soil_moisture_sensor": {
             "high_is_dry": bool(bo["soil_moisture_sensor"].get("high_is_dry", True)),
-            "sample_count": max(int(bo["soil_moisture_sensor"].get("sample_count", 3)), 1),
+            "sample_count": max(
+                int(bo["soil_moisture_sensor"].get("sample_count", 3)), 1
+            ),
         },
         "settings": {
             "enable_irrigation_schedule": bool(
