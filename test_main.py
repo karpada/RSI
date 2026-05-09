@@ -64,6 +64,46 @@ class TestRsiApi(unittest.TestCase):
         except requests.exceptions.RequestException as e:
             self.fail(f"Failed to connect to device at {BASE_URL}. Error: {e}")
 
+    def test_04_get_root(self):
+        """Tests that GET / serves the correct index.html page."""
+        print("Testing GET / content...")
+        try:
+            # Read the local index.html file
+            with open("index.html", "r") as f:
+                local_content = f.read()
+
+            # Get the remote content from the root URL
+            response = requests.get(f"{BASE_URL}/", timeout=5)
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("text/html", response.headers["Content-Type"])
+
+            self.assertEqual(local_content, response.text)
+
+        except FileNotFoundError:
+            self.fail("Could not find the local index.html file to compare against.")
+        except requests.exceptions.RequestException as e:
+            self.fail(f"Failed to connect to device at {BASE_URL}. Error: {e}")
+
+    def test_05_get_file_main_py(self):
+        """Tests GET /file/main.py and validates its content against the local file."""
+        print("Testing GET /file/main.py content...")
+        try:
+            # Read the local main.py file
+            with open("main.py", "r") as f:
+                local_content = f.read()
+
+            # Get the remote main.py file content
+            file_response = requests.get(f"{BASE_URL}/file/main.py", timeout=5)
+            self.assertEqual(file_response.status_code, 200)
+
+            self.assertEqual(local_content, file_response.text)
+
+        except FileNotFoundError:
+            self.fail("Could not find the local main.py file to compare against.")
+        except requests.exceptions.RequestException as e:
+            self.fail(f"Failed to connect to device at {BASE_URL}. Error: {e}")
+
+
 if __name__ == '__main__':
     print("--- RSI Black-Box Test Suite ---")
     print(f"Target Device: {BASE_URL}")

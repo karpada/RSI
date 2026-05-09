@@ -702,30 +702,214 @@ def get_status_message(status_code):
     return status_messages.get(status_code, "Unknown")
 
 
+#######################
+# HTTP Response Helpers
+#######################
+
+
+async def send_response(writer, content_type, response, status_code=200):
+    writer.write(
+        f"HTTP/1.0 {status_code} {get_status_message(status_code)}\r\nContent-type: {content_type}\r\n\r\n".encode(
+            "utf-8"
+        )
+    )
+    if response:
+        writer.write(response.encode("utf-8"))
+    await writer.drain()
+
+
+async def send_json(writer, data, status_code=200):
+    await send_response(writer, "application/json", ujson.dumps(data), status_code)
+
+
+async def send_file(writer, content_type, filename, status_code=200):
+    writer.write(
+        f"HTTP/1.0 {status_code} {get_status_message(status_code)}\r\nContent-type: {content_type}\r\n\r\n".encode(
+            "utf-8"
+        )
+    )
+    await serve_file(filename, writer)
+
+
+#######################
+# HTTP Route Handlers
+#######################
+
+
+async def handle_get_root(writer, **kwargs):
+    filename = "setup.html" if WIFI_SETUP_MODE else "index.html"
+    await send_file(writer, "text/html", filename)
+
+
+async def handle_get_favicon(writer, **kwargs):
+    response = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="M50 5 C30 5 5 35 5 60 C5 85 25 95 50 95 C75 95 95 85 95 60 C95 35 70 5 50 5Z" fill="#4FC3F7" stroke="#29B6F6" stroke-width="2"/><ellipse cx="30" cy="35" rx="10" ry="15" fill="#81D4FA" transform="rotate(-35 30 35)"/></svg>'
+    await send_response(writer, "image/svg+xml", response)
+
+
+async def handle_get_config(writer, **kwargs):
+    await send_json(writer, config)
+
+
+async def handle_post_config(reader, content_length, writer, **kwargs):
+    body = (
+        ujson.loads((await reader.read(content_length)).decode())
+        if content_length > 0
+        else None
+    )
+    await apply_config(body)
+    save_as_json("config.json", config)
+    await send_json(writer, config)
+
+
+async def handle_put_pause(writer, query_params, **kwargs):
+    duration_sec = int(query_params.get("duration_sec", 0))
+    schedule_pause_until = get_local_timestamp() + duration_sec
+    info(None, None, f"Pausing schedule for {duration_sec} seconds")
+    schedule_completed_until[:] = [schedule_pause_until] * len(
+        schedule_completed_until
+    )
+    await send_json(writer, {"status": "ok"})
+
+
+async def handle_put_adhoc(writer, query_params, **kwargs):
+    duration_sec = int(query_params.get("duration_sec", 0))
+    zone_id = int(query_params.get("zone_id", -1))
+    if 0 <= zone_id < len(config["zones"]) and duration_sec >= 0:
+        end_time = get_local_timestamp() + duration_sec
+        debug(
+            zone_id,
+            None,
+            f"Ad-hoc irrigation for zone {zone_id} of {duration_sec}s (until {end_time})",
+        )
+        ad_hoc_irrigation_until[zone_id] = end_time
+    await send_json(writer, {"status": "ok"})
+
+
+async def handle_post_file(reader, content_length, writer, path, query_params, **kwargs):
+    filename = path[6:]
+    info(None, None, f"Updating {filename}")
+    await store_file(reader, content_length, filename)
+    response = {
+        "filepath": filename,
+        "stat": ujson.dumps(stat(filename)),
+    }
+    await send_json(writer, response)
+    if "1" == query_params.get("reboot", "0"):
+        return True  # Signal for reboot
+
+
+async def handle_get_file(writer, path, **kwargs):
+    filename = path[6:]
+    await send_file(writer, "text/html", filename)  # Content-type is a simplification
+
+
+async def handle_get_status(writer, **kwargs):
+    now = get_local_timestamp()
+    response = {
+        "version": VERSION,
+        "local_timestamp": now,
+        "soil_moisture": {
+            z["name"]: get_soil_moisture_milli(i)
+            for i, z in enumerate(config["zones"])
+            if z["adc_pin_id"] >= 0 and not z["master"]
+        },
+        "machine": sys.implementation._machine,
+        "gc.mem_alloc": mem_alloc(),
+        "gc.mem_free": mem_free(),
+        "valve_status": f"{valve_status:08b}",
+        "schedule_status": f"{schedule_status:08b}",
+        "mcu_temperature": mcu_temperature(),
+        "schedule_completed_until": [
+            max(t - now, -1) for t in schedule_completed_until
+        ],
+        "ad_hoc_irrigation": {
+            f"Zone[{zone_id}]='{config['zones'][zone_id]['name']}'": max(t - now, -1)
+            for zone_id, t in ad_hoc_irrigation_until.items()
+        },
+        "hostname": config["options"]["wifi"]["hostname"],
+        "mac_address": ":".join([f"{b:02x}" for b in wlan.config("mac")]),
+    }
+    await send_json(writer, response)
+
+
+async def handle_get_log(writer, **kwargs):
+    now = get_local_timestamp()
+    response = {
+        "local_timestamp": now,
+        "log": [
+            {
+                "timestamp": i.timestamp,
+                "level": i.level,
+                "zone_id": i.zone_id,
+                "schedule_id": i.schedule_id,
+                "message": i.message,
+            }
+            for i in LOG
+        ],
+    }
+    await send_json(writer, response)
+
+
+async def handle_get_logtsv(writer, **kwargs):
+    response = "\n".join(
+        [
+            f"{i.timestamp}\t{i.level}\t{i.zone_id}\t{i.schedule_id}\t{i.message}"
+            for i in LOG
+        ]
+    )
+    await send_response(writer, "text/tab-separated-values", response)
+
+
+async def handle_put_reboot(writer, **kwargs):
+    await send_response(writer, "text/html", "OK")
+    return True  # Signal for reboot
+
+
+async def handle_get_setup(writer, query_params, **kwargs):
+    info(None, None, f"Setup: query_params={query_params}")
+    save_as_json("config.json", {"options": {"wifi": query_params}})
+    await send_response(writer, "text/html", "OK")
+    return True  # Signal for reboot
+
+
+async def handle_not_found(writer, method, path, **kwargs):
+    response = f"Resource not found: method={method} path={path}"
+    await send_response(writer, "text/html", response, status_code=404)
+
+
 ################
 # handle_request
 ################
+
+ROUTES = {
+    ("GET", "/"): handle_get_root,
+    ("GET", "/favicon.ico"): handle_get_favicon,
+    ("GET", "/config"): handle_get_config,
+    ("POST", "/config"): handle_post_config,
+    ("PUT", "/pause"): handle_put_pause,
+    ("PUT", "/adhoc"): handle_put_adhoc,
+    ("GET", "/status"): handle_get_status,
+    ("GET", "/log"): handle_get_log,
+    ("GET", "/logtsv"): handle_get_logtsv,
+    ("PUT", "/reboot"): handle_put_reboot,
+}
+
+
 async def handle_request(reader, writer):
-    content_type = "application/json"
-    status_code = 200
-    filename = None
+    reboot = False
+    req_start_time = time.ticks_ms()
+    method, path = "unknown", "unknown"  # for logging in case of early failure
 
     try:
         req = (await reader.readline()).decode().lstrip()
-        req_start_time = time.ticks_ms()
-
         if not req:
-            writer.close()
-            await writer.wait_closed()
             return
+
         method, path, _ = req.split(" ", 2)
         path, query_params = path.split("?", 1) if "?" in path else (path, None)
         query_params = (
             dict(
-                [
-                    param.replace("+", " ").split("=", 1)
-                    for param in query_params.split("&")
-                ]
+                [param.replace("+", " ").split("=", 1) for param in query_params.split("&")]
             )
             if query_params
             else {}
@@ -738,155 +922,42 @@ async def handle_request(reader, writer):
             None,
             None,
             f"Processing request: {method:4} {path:14} query_params={query_params}, (content_length={content_length})",
-        )  #     headers={headers}")
+        )
 
-        reboot = False
-        response = "Should not happen"
+        # Conditionally add setup route
+        if WIFI_SETUP_MODE:
+            ROUTES[("GET", "/setup")] = handle_get_setup
 
-        if method == "GET" and path == "/":
-            filename = "setup.html" if WIFI_SETUP_MODE else "index.html"
-            content_type = "text/html"
-        elif method == "GET" and path == "/favicon.ico":
-            content_type = "image/svg+xml"
-            response = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="M50 5 C30 5 5 35 5 60 C5 85 25 95 50 95 C75 95 95 85 95 60 C95 35 70 5 50 5Z" fill="#4FC3F7" stroke="#29B6F6" stroke-width="2"/><ellipse cx="30" cy="35" rx="10" ry="15" fill="#81D4FA" transform="rotate(-35 30 35)"/></svg>'
-        elif method == "GET" and path == "/config":
-            # curl example: curl http://[ESP32_IP]/config
-            response = ujson.dumps(config)
-        elif method == "POST" and path == "/config":
-            body = (
-                ujson.loads((await reader.read(content_length)).decode())
-                if content_length > 0
-                else None
-            )
-            # restore backup: jq . irrigation-config.json | curl -H "Content-Type: application/json" -X POST --data-binary @- http://192.168.68.ESP/config
-            await apply_config(body)
-            response = ujson.dumps(config)
-            save_as_json("config.json", config)
-        elif method == "PUT" and path == "/pause":
-            schedule_pause_until = get_local_timestamp() + int(
-                query_params.get("duration_sec", 0)
-            )
-            info(
-                None,
-                None,
-                f"Pausing schedule for {int(query_params.get('duration_sec', 0))} seconds",
-            )
-            schedule_completed_until[:] = [schedule_pause_until] * len(
-                schedule_completed_until
-            )
-        elif method == "PUT" and path == "/adhoc":
-            duration_sec = int(query_params.get("duration_sec", 0))
-            zone_id = int(query_params.get("zone_id", -1))
-            if 0 <= zone_id < len(config["zones"]) and duration_sec >= 0:
-                end_time = get_local_timestamp() + duration_sec
-                debug(
-                    zone_id,
-                    None,
-                    f"Ad-hoc irrigation for zone {zone_id} of {duration_sec}s (until {end_time})",
-                )
-                ad_hoc_irrigation_until[zone_id] = end_time
+        handler = ROUTES.get((method, path))
+        handler_kwargs = {
+            "reader": reader,
+            "writer": writer,
+            "query_params": query_params,
+            "content_length": content_length,
+            "path": path,
+            "method": method,
+            "headers": headers,
+        }
+
+        if handler:
+            reboot = await handler(**handler_kwargs)
         elif method == "POST" and path.startswith("/file/"):
-            # curl -X POST --data-binary @main.py http://192.168.68.114/file/main.py\?reboot\=1
-            info(None, None, f"Updating {path[6:]}")
-            await store_file(reader, content_length, path[6:])
-            # if '1' == query_params.get('reboot', '0'):
-            #     reboot = True
-            response = ujson.dumps(
-                {
-                    "method": method,
-                    "filepath": path[6:],
-                    "stat": ujson.dumps(stat(path[6:])),
-                }
-            )
+            reboot = await handle_post_file(**handler_kwargs)
         elif method == "GET" and path.startswith("/file/"):
-            filename = path[6:]
-            content_type = "text/html"
-        elif method == "GET" and path == "/status":
-            now = get_local_timestamp()
-            response = ujson.dumps(
-                {
-                    "version": VERSION,
-                    "local_timestamp": now,
-                    "soil_moisture": {
-                        z["name"]: get_soil_moisture_milli(i)
-                        for i, z in enumerate(config["zones"])
-                        if z["adc_pin_id"] >= 0 and not z["master"]
-                    },
-                    "machine": sys.implementation._machine,
-                    "gc.mem_alloc": mem_alloc(),
-                    "gc.mem_free": mem_free(),
-                    "valve_status": f"{valve_status:08b}",
-                    "schedule_status": f"{schedule_status:08b}",
-                    "mcu_temperature": mcu_temperature(),
-                    "schedule_completed_until": [
-                        max(t - now, -1) for t in schedule_completed_until
-                    ],
-                    "ad_hoc_irrigation": {
-                        f"Zone[{zone_id}]='{config['zones'][zone_id]['name']}'": max(
-                            t - now, -1
-                        )
-                        for zone_id, t in ad_hoc_irrigation_until.items()
-                    },
-                    "hostname": config["options"]["wifi"]["hostname"],
-                    "mac_address": ":".join([f"{b:02x}" for b in wlan.config("mac")]),
-                }
-            )
-        elif method == "GET" and path == "/log":
-            now = get_local_timestamp()
-            response = ujson.dumps(
-                {
-                    "local_timestamp": now,
-                    "log": [
-                        {
-                            "timestamp": i.timestamp,
-                            "level": i.level,
-                            "zone_id": i.zone_id,
-                            "schedule_id": i.schedule_id,
-                            "message": i.message,
-                        }
-                        for i in LOG
-                    ],
-                }
-            )
-        elif method == "GET" and path == "/logtsv":
-            response = "\n".join(
-                [
-                    f"{i.timestamp}\t{i.level}\t{i.zone_id}\t{i.schedule_id}\t{i.message}"
-                    for i in LOG
-                ]
-            )
-        elif method == "PUT" and path == "/reboot":
-            response = "OK"
-            content_type = "text/html"
-            reboot = True
-        elif WIFI_SETUP_MODE and method == "GET" and path == "/setup":
-            info(None, None, f"Setup: query_params={query_params}")
-            save_as_json("config.json", {"options": {"wifi": query_params}})
-            response = "OK"
-            content_type = "text/html"
-            reboot = True
+            await handle_get_file(**handler_kwargs)
         else:
-            response = f"Resource not found: method={method} path={path}"
-            status_code = 404
+            await handle_not_found(**handler_kwargs)
 
     except Exception as e:
         warn(None, None, f"failed handling request: {e}")
-        writer.write(f"HTTP/1.0 500 {get_status_message(500)}\r\n")
-        await writer.drain()
+        try:
+            await send_response(writer, "text/html", "Server Error", status_code=500)
+        except Exception as e2:
+            warn(None, None, f"failed sending error response: {e2}")
+    finally:
         writer.close()
         await writer.wait_closed()
-        raise
 
-    writer.write(
-        f"HTTP/1.0 {status_code} {get_status_message(status_code)}\r\nContent-type: {content_type}\r\n\r\n"
-    )
-    if filename:
-        await serve_file(filename, writer)
-    else:
-        writer.write(response.encode("utf-8"))
-    await writer.drain()
-    writer.close()
-    await writer.wait_closed()
     debug(
         None,
         None,
