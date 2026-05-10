@@ -12,7 +12,7 @@ import urequests as requests
 from uos import rename, remove, stat
 
 # Global variables
-VERSION = "v1.1.8"  # DO NOT EDIT: This line is automatically updated by the version-bump workflow
+VERSION = "v1.2.0"  # DO NOT EDIT: This line is automatically updated by the version-bump workflow
 MICROPYTHON_TO_TIMESTAMP: int = 946684800  # 2000-1970 --> 3155673600 - 2208988800
 TIMESTAMP_2001_01_01: int = (
     978307200  # Monday, This is the date used when ntp is not available
@@ -765,9 +765,7 @@ async def handle_put_pause(writer, query_params, **kwargs):
     duration_sec = int(query_params.get("duration_sec", 0))
     schedule_pause_until = get_local_timestamp() + duration_sec
     info(None, None, f"Pausing schedule for {duration_sec} seconds")
-    schedule_completed_until[:] = [schedule_pause_until] * len(
-        schedule_completed_until
-    )
+    schedule_completed_until[:] = [schedule_pause_until] * len(schedule_completed_until)
     await send_json(writer, {"status": "ok"})
 
 
@@ -785,7 +783,9 @@ async def handle_put_adhoc(writer, query_params, **kwargs):
     await send_json(writer, {"status": "ok"})
 
 
-async def handle_post_file(reader, content_length, writer, path, query_params, **kwargs):
+async def handle_post_file(
+    reader, content_length, writer, path, query_params, **kwargs
+):
     filename = path[6:]
     info(None, None, f"Updating {filename}")
     await store_file(reader, content_length, filename)
@@ -909,7 +909,10 @@ async def handle_request(reader, writer):
         path, query_params = path.split("?", 1) if "?" in path else (path, None)
         query_params = (
             dict(
-                [param.replace("+", " ").split("=", 1) for param in query_params.split("&")]
+                [
+                    param.replace("+", " ").split("=", 1)
+                    for param in query_params.split("&")
+                ]
             )
             if query_params
             else {}
