@@ -21,16 +21,16 @@ jobs:
         run: |
           # codespell version should be kept in sync with .pre-commit-config.yml
           pip install --user codespell==2.4.1 tomli
-          codespell --write-changes main.py
-          git diff-index --quiet HEAD || echo "codespell_fixed=[main.py]" >> $GITHUB_OUTPUT
+          codespell --write-changes *.py
+          git diff-index --quiet HEAD || echo "codespell_fixed=[*.py]" >> $GITHUB_OUTPUT
 
       - name: Ruff
         id: ruff
         run: |
           # ruff version should be kept in sync with .pre-commit-config.yml
           pip install --user ruff==0.14.9
-          ruff check --fix --exit-non-zero-on-fix main.py || echo "ruff_check_fixed=[main.py]" >> $GITHUB_OUTPUT
-          ruff format --exit-non-zero-on-format main.py || echo "ruff_format_fixed=[main.py]" >> $GITHUB_OUTPUT
+          ruff check --fix --exit-non-zero-on-fix *.py || echo "ruff_check_fixed=[*.py]" >> $GITHUB_OUTPUT
+          ruff format --exit-non-zero-on-format *.py || echo "ruff_format_fixed=[*.py]" >> $GITHUB_OUTPUT
 
 
       - name: Get Next Version
@@ -60,7 +60,7 @@ jobs:
           RUFF_FORMAT_FIXED="${{ steps.ruff.outputs.ruff_format_fixed }}"
 
           git diff
-          git add main.py
+          git add *.py
 
           git commit -m "Bumped version: $CURRENT_VERSION -> $NEW_VERSION, AutomatedFixes: (${CODESPELL_FIXED:+CodeSpell }${RUFF_CHECK_FIXED:+RuffCheck }${RUFF_FORMAT_FIXED:+RuffFormat })" || exit 0
           git tag -a "${NEW_VERSION}" -m "Release ${NEW_VERSION}"
