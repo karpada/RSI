@@ -1,6 +1,5 @@
 import requests
 import unittest
-import os
 import sys
 
 # --- Test Configuration ---
@@ -11,9 +10,8 @@ if len(sys.argv) < 2:
     print("Usage: python3 test_main.py <device_ip_or_hostname>")
     sys.exit(1)
 
-# Get IP from command-line argument, and remove it so unittest doesn't see it
-DEVICE_IP = sys.argv.pop(1)
-BASE_URL = f"http://{DEVICE_IP}"
+# Get IP or hostname from command-line argument, and remove it so unittest doesn't see it
+BASE_URL = f"http://{sys.argv.pop(1)}"
 
 class TestRsiApi(unittest.TestCase):
     """
