@@ -1,17 +1,89 @@
 <!DOCTYPE html>
 <html>
-
 <head>
-    <title>RSI - Real Simple Irrigation: WiFi Setup</title>
+    <title>RSI - WiFi Setup</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { font-family: sans-serif; max-width: 400px; margin: 20px auto; padding: 0 15px; background-color: #f4f4f4; }
+        h1 { text-align: center; color: #333; }
+        form { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        label { display: block; margin-bottom: 5px; color: #555; }
+        input { width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+        button { width: 100%; padding: 12px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
+        button:hover { background-color: #0056b3; }
+        .status { margin-top: 20px; padding: 12px; border-radius: 5px; text-align: center; }
+        .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+    </style>
 </head>
-
 <body>
-    <h1>RSI - Real Simple Irrigation:  WiFi Setup</h1>
-    <form action="/setup" method="put">
-        SSID: <input type="text" name="ssid"><br>
-        Password: <input type="password" name="password"><br>
-        <input type="submit" value="setup">
+    <h1>RSI - WiFi Setup</h1>
+    <form id="wifi-form">
+        <label for="hostname">Hostname:</label>
+        <input type="text" id="hostname" name="hostname" value="rsi-irrigation" required>
+        <label for="ssid">WiFi SSID:</label>
+        <input type="text" id="ssid" name="ssid" required>
+        <label for="password">Password:</label>
+        <input type="password" id="password" name="password">
+        <button type="submit">Save and Reboot</button>
     </form>
-</body>
+    <div id="status-message" class="status" style="display:none;"></div>
 
+    <script>
+        document.getElementById('wifi-form').addEventListener('submit', function(event) {
+            event.preventDefault();
+            const hostname = document.getElementById('hostname').value;
+            const ssid = document.getElementById('ssid').value;
+            const password = document.getElementById('password').value;
+            const statusDiv = document.getElementById('status-message');
+
+            statusDiv.style.display = 'none';
+            statusDiv.className = 'status';
+
+            const configPayload = {
+                "options": {
+                    "wifi": {
+                        "ssid": ssid,
+                        "password": password
+                    },
+                    "mdns": {
+                        "hostname": hostname
+                    }
+                }
+            };
+
+            statusDiv.textContent = 'Saving configuration...';
+            statusDiv.style.display = 'block';
+
+            // Step 1: Post the new configuration
+            fetch('/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(configPayload),
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Failed to save configuration. Status: ' + response.status);
+                }
+                statusDiv.textContent = 'Configuration saved. Rebooting...';
+                statusDiv.className = 'status success';
+
+                // Step 2: Trigger the reboot
+                return fetch('/reboot', { method: 'PUT' });
+            })
+            .then(response => {
+                if (!response.ok) {
+                    // This error might not be visible if the device reboots too quickly
+                    throw new Error('Reboot command failed. Status: ' + response.status);
+                }
+                statusDiv.innerHTML = `Device is rebooting. Please connect to your regular WiFi network to access it at: <a href="http://${hostname}.local">http://${hostname}.local</a>`;
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                statusDiv.textContent = 'Error: ' + error.message;
+                statusDiv.className = 'status error';
+            });
+        });
+    </script>
+</body>
 </html>

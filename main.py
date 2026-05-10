@@ -794,8 +794,6 @@ async def handle_post_file(
         "stat": ujson.dumps(stat(filename)),
     }
     await send_json(writer, response)
-    if "1" == query_params.get("reboot", "0"):
-        return True  # Signal for reboot
 
 
 async def handle_get_file(writer, path, **kwargs):
@@ -865,13 +863,6 @@ async def handle_put_reboot(writer, **kwargs):
     return True  # Signal for reboot
 
 
-async def handle_get_setup(writer, query_params, **kwargs):
-    info(None, None, f"Setup: query_params={query_params}")
-    save_as_json("config.json", {"options": {"wifi": query_params}})
-    await send_response(writer, "text/html", "OK")
-    return True  # Signal for reboot
-
-
 async def handle_not_found(writer, method, path, **kwargs):
     response = f"Resource not found: method={method} path={path}"
     await send_response(writer, "text/html", response, status_code=404)
@@ -927,10 +918,6 @@ async def handle_request(reader, writer):
             f"Processing request: {method:4} {path:14} query_params={query_params}, (content_length={content_length})",
         )
 
-        # Conditionally add setup route
-        if WIFI_SETUP_MODE:
-            ROUTES[("GET", "/setup")] = handle_get_setup
-
         handler = ROUTES.get((method, path))
         handler_kwargs = {
             "reader": reader,
@@ -945,7 +932,7 @@ async def handle_request(reader, writer):
         if handler:
             reboot = await handler(**handler_kwargs)
         elif method == "POST" and path.startswith("/file/"):
-            reboot = await handle_post_file(**handler_kwargs)
+            await handle_post_file(**handler_kwargs)
         elif method == "GET" and path.startswith("/file/"):
             await handle_get_file(**handler_kwargs)
         else:
@@ -999,14 +986,21 @@ async def send_metrics():
             await asyncio.sleep(config["options"]["monitoring"]["send_interval_sec"])
 
 
-async def wait_for_wifi_setup(button_pin_id: int, wait_time: int) -> None:
+async def run_setup_mode_if_needed(button_pin_id: int, wait_time: int) -> None:
     global WIFI_SETUP_MODE
 
-    for _ in range(round(wait_time * 10)):
-        await asyncio.sleep(0.1)
-        if 0 == Pin(button_pin_id, Pin.IN, Pin.PULL_UP).value():
-            WIFI_SETUP_MODE = True
-            break
+    try:
+        stat("config.json")
+    except OSError:
+        WIFI_SETUP_MODE = True
+
+    if not WIFI_SETUP_MODE and button_pin_id >= 0:
+        for _ in range(round(wait_time * 10)):
+            await asyncio.sleep(0.1)
+            if 0 == Pin(button_pin_id, Pin.IN, Pin.PULL_UP).value():
+                WIFI_SETUP_MODE = True
+                break
+
     if WIFI_SETUP_MODE:
         if heartbeat_pin_id >= 0:
             PWM(Pin(heartbeat_pin_id), freq=5, duty_u16=32768)
@@ -1048,8 +1042,7 @@ async def main():
     heartbeat_pin_id = bootstrap.heartbeat_pin_id
     heartbeat_high_is_on = bootstrap.heartbeat_high_is_on
 
-    if bootstrap.button_pin_id >= 0:
-        await wait_for_wifi_setup(bootstrap.button_pin_id, 1)
+    await run_setup_mode_if_needed(bootstrap.button_pin_id, 1)
 
     await apply_config(load_from_json("config.json") or {})
 

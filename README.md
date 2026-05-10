@@ -94,9 +94,49 @@ Note: The H-Bridge L298N has an onboard 5V regulator which can be used to power 
 # Setup
 
 ## Initial Setup
-1. Using Thonny, copy `main.py`, `index.html`, `setup.html` to the ESP32.
-1. Reset & enter WiFi setup mode by pressing the button within 1 second. The LED will blink rapidly.
-1. Connect to the ESP32's WiFi `irrigation-esp32` and configure the WiFi settings.
+
+There are two main ways to get the software onto the device:
+
+### A) Using Thonny (or another MicroPython IDE)
+This is the recommended method for first-time setup.
+
+1.  **Flash MicroPython:** If your board is new, follow the instructions for your specific ESP32 board to flash the MicroPython firmware.
+2.  **Connect to your device** using an IDE like [Thonny](https://thonny.org/).
+3.  **Copy Files:** Copy `main.py`, `index.html`, and `setup.html` to the root directory of the device.
+4.  **Reset the device.**
+
+### B) Using the Web Uploader (for upgrades)
+If you already have a running version of RSI, you can use the web interface to upload new files. See the "Uploading a new version" section below.
+
+---
+
+### First-Time Configuration
+
+Once the RSI software is on the device, you need to configure it to connect to your local WiFi network.
+
+1.  **Enter WiFi Setup Mode:**
+    *   On first boot with a fresh `config.json` or no `config.json`, the device will automatically enter setup mode.
+    *   Alternatively, you can force setup mode by pressing and holding the `BOOT` button (usually GPIO0) on your ESP32 board within the first second of power-on. The onboard LED will blink rapidly to indicate it's in setup mode.
+
+2.  **Connect to the Device's WiFi:**
+    *   The device will create its own WiFi hotspot.
+    *   **Network Name (SSID):** `irrigation-esp32`
+    *   Use your computer or smartphone to connect to this network. No password is required.
+
+3.  **Access the Setup Page:**
+    *   Once connected, open a web browser.
+    *   Navigate to `http://192.168.4.1`. This is the gateway address for the device's hotspot.
+    *   You should see the RSI WiFi Setup page.
+
+4.  **Configure and Reboot:**
+    *   On the setup page, enter the **SSID** and **Password** for your home WiFi network.
+    *   You can also set a **Hostname** for the device, which will allow you to access it on your local network using a friendly name (e.g., `http://my-irrigation.local`).
+    *   Click **"Save and Reboot"**.
+
+5.  **Connect on Your Network:**
+    *   The device will restart and connect to the WiFi network you provided.
+    *   You can now disconnect your computer/phone from the `irrigation-esp32` network and reconnect to your regular home network.
+    *   Access the main RSI interface by navigating to the hostname you set (e.g., `http://my-irrigation.local`) or by finding the device's IP address on your router.
 
 ## Configuration
 
@@ -137,6 +177,8 @@ Each schedule defines when and how a specific zone should be watered:
 ### Options
 
 #### wifi
+These settings are configured during the [First-Time Configuration](#first-time-configuration) process on the setup page. They can also be modified later from the main application's configuration screen.
+
 1. **ssid**: Your WiFi SSID (network name) - leave empty to disable WiFi connection
 1. **password**: Your WiFi password
 1. **hostname**: The hostname of the controller for network identification (default: `rsi-` + last 3 MAC address bytes, e.g., `rsi-a1b2c3`). Allows connecting using hostname.local
