@@ -13,6 +13,7 @@ if len(sys.argv) < 2:
 # Get IP or hostname from command-line argument, and remove it so unittest doesn't see it
 BASE_URL = f"http://{sys.argv.pop(1)}"
 
+
 class TestRsiApi(unittest.TestCase):
     """
     A test suite for the RSI web API.
@@ -102,7 +103,7 @@ class TestRsiApi(unittest.TestCase):
             self.fail(f"Failed to connect to device at {BASE_URL}. Error: {e}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     print("--- RSI Black-Box Test Suite ---")
     print(f"Target Device: {BASE_URL}")
     print("Please ensure the RSI device is running and connected to the network.\n")
