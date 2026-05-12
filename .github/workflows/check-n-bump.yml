@@ -32,6 +32,9 @@ jobs:
           ruff check --fix --exit-non-zero-on-fix *.py || echo "ruff_check_fixed=[*.py]" >> $GITHUB_OUTPUT
           ruff format --exit-non-zero-on-format *.py || echo "ruff_format_fixed=[*.py]" >> $GITHUB_OUTPUT
 
+      - name: Run Unit Tests
+        run: |
+          python -m unittest discover tests -p "test_unit.py"
 
       - name: Get Next Version
         id: semver
