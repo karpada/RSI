@@ -74,7 +74,9 @@ class TestUnitTests(unittest.TestCase):
             save_as_json(test_filename, test_data)
             m.assert_called_once_with(tmp_filename, "w", encoding="utf-8")
             sys.modules["ujson"].dump.assert_called_once_with(test_data, m())
-            sys.modules["uos"].rename.assert_called_once_with(tmp_filename, test_filename)
+            sys.modules["uos"].rename.assert_called_once_with(
+                tmp_filename, test_filename
+            )
 
             m.reset_mock()
             sys.modules["ujson"].reset_mock()

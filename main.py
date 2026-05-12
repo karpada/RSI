@@ -12,7 +12,7 @@ import urequests as requests
 from uos import rename, remove, stat
 
 # Global variables
-VERSION = "v1.4.2"  # DO NOT EDIT: This line is automatically updated by the version-bump workflow
+VERSION = "v1.4.1"  # DO NOT EDIT: This line is automatically updated by the version-bump workflow
 MICROPYTHON_TO_TIMESTAMP: int = 946684800  # 2000-1970 --> 3155673600 - 2208988800
 TIMESTAMP_2001_01_01: int = (
     978307200  # Monday, This is the date used when ntp is not available
@@ -290,6 +290,22 @@ async def apply_valves(new_status: int) -> None:
 
     if relay_pin_id >= 0:
         Pin(relay_pin_id, Pin.IN)
+
+
+######################
+# Irrigation scheduler
+CONFIG_FILENAME = "rsi-config.json"
+
+
+def migrate_config_if_needed() -> None:
+    try:
+        stat(CONFIG_FILENAME)
+    except OSError:
+        try:
+            rename("config.json", CONFIG_FILENAME)
+            info(None, None, "Renamed config.json to rsi-config.json")
+        except OSError:
+            pass  # old config does not exist, nothing to do
 
 
 ######################
@@ -757,7 +773,7 @@ async def handle_post_config(reader, content_length, writer, **kwargs):
         else None
     )
     await apply_config(body)
-    save_as_json("config.json", config)
+    save_as_json(CONFIG_FILENAME, config)
     await send_json(writer, config)
 
 
@@ -990,7 +1006,7 @@ async def run_setup_mode_if_needed(button_pin_id: int, wait_time: int) -> None:
     global WIFI_SETUP_MODE
 
     try:
-        stat("config.json")
+        stat(CONFIG_FILENAME)
     except OSError:
         WIFI_SETUP_MODE = True
 
@@ -1042,9 +1058,11 @@ async def main():
     heartbeat_pin_id = bootstrap.heartbeat_pin_id
     heartbeat_high_is_on = bootstrap.heartbeat_high_is_on
 
+    migrate_config_if_needed()
+
     await run_setup_mode_if_needed(bootstrap.button_pin_id, 1)
 
-    await apply_config(load_from_json("config.json") or {})
+    await apply_config(load_from_json(CONFIG_FILENAME) or {})
 
     # set valve_status = 0b1111...1 so that the first apply_valves will turn off all valves
     valve_status = (1 << len(config["zones"])) - 1

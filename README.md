@@ -115,7 +115,7 @@ If you already have a running version of RSI, you can use the web interface to u
 Once the RSI software is on the device, you need to configure it to connect to your local WiFi network.
 
 1.  **Enter WiFi Setup Mode:**
-    *   On first boot with a fresh `config.json` or no `config.json`, the device will automatically enter setup mode.
+    *   On first boot with a fresh `rsi-config.json` or no `rsi-config.json`, the device will automatically enter setup mode.
     *   Alternatively, you can force setup mode by pressing and holding the `BOOT` button (usually GPIO0) on your ESP32 board within the first second of power-on. The onboard LED will blink rapidly to indicate it's in setup mode.
 
 2.  **Connect to the Device's WiFi:**
