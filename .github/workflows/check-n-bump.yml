@@ -21,16 +21,16 @@ jobs:
         run: |
           # codespell version should be kept in sync with .pre-commit-config.yml
           pip install --user codespell==2.4.1 tomli
-          codespell --write-changes *.py
-          git diff-index --quiet HEAD || echo "codespell_fixed=[*.py]" >> $GITHUB_OUTPUT
+          codespell --write-changes *.py tests/*.py
+          git diff-index --quiet HEAD || echo "codespell_fixed=[*.py, tests/*.py]" >> $GITHUB_OUTPUT
 
       - name: Ruff
         id: ruff
         run: |
           # ruff version should be kept in sync with .pre-commit-config.yml
           pip install --user ruff==0.14.9
-          ruff check --fix --exit-non-zero-on-fix *.py || echo "ruff_check_fixed=[*.py]" >> $GITHUB_OUTPUT
-          ruff format --exit-non-zero-on-format *.py || echo "ruff_format_fixed=[*.py]" >> $GITHUB_OUTPUT
+          ruff check --fix --exit-non-zero-on-fix *.py tests/*.py || echo "ruff_check_fixed=[*.py, tests/*.py]" >> $GITHUB_OUTPUT
+          ruff format --exit-non-zero-on-format *.py tests/*.py || echo "ruff_format_fixed=[*.py, tests/*.py]" >> $GITHUB_OUTPUT
 
       - name: Run Unit Tests
         run: |
