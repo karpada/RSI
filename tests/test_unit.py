@@ -18,7 +18,7 @@ sys.modules["uasyncio"] = MagicMock()
 sys.modules["urequests"] = MagicMock()
 sys.modules["uos"] = MagicMock()
 
-from main import get_soil_moisture_milli, save_as_json, load_from_json
+from main import get_soil_moisture_milli, save_as_json, load_from_json  # noqa: E402
 
 
 class TestUnitTests(unittest.TestCase):
