@@ -327,16 +327,6 @@
         </div>
         <div class="space-y-4">
             <div class="bg-white p-4 rounded shadow">
-                <h2 id="zones" class="text-xl font-semibold mb-2">> Zones</h2>
-                <div id="zones-content" class="collapsible-content">
-                    <div id="zones-table"></div>
-                    <div class="mt-2 flex space-x-2">
-                        <button onclick="addZone()" class="bg-blue-500 text-white px-4 py-2 rounded">Add Zone</button>
-                    </div>
-                </div>
-            </div>
-
-            <div class="bg-white p-4 rounded shadow">
                 <h2 class="text-xl font-semibold mb-2">Schedules</h2>
                 <div class="mt-2 flex space-x-2">
                     <button type="button" onclick="triggerPauseSchedules()" class="bg-orange-500 text-white px-4 py-2 rounded">Pause (h)</button>
@@ -354,16 +344,27 @@
             </div>
 
             <div class="bg-white p-4 rounded shadow">
-                <h2 id="options" class="text-xl font-semibold mb-2">> Options</h2>
-                <form id="options-form" class="collapsible-content space-y-4"></form>
-            </div>
+                <h2 id="settings" class="cursor-pointer text-xl font-semibold mb-2">> Settings</h2>
+                <div id="settings-content" class="collapsible-content space-y-6">
+                    <div>
+                        <h3 class="text-xl font-semibold mb-2">Zones</h3>
+                        <div id="zones-table"></div>
+                        <div class="mt-2 flex space-x-2">
+                            <button onclick="addZone()" class="bg-blue-500 text-white px-4 py-2 rounded">Add Zone</button>
+                        </div>
+                    </div>
 
-            <div class="bg-white p-4 rounded shadow">
-                <h2 id="system" class="text-xl font-semibold mb-2">> System</h2>
-                <div id="system-content" class="collapsible-content">
-                    <div class="mt-2 flex space-x-2 items-center">
-                        <input type="text" id="update-tag" class="border rounded px-2 py-2" placeholder="Version (e.g. v1.5.0)">
-                        <button onclick="applyUpdate()" class="bg-blue-500 text-white px-4 py-2 rounded">Apply Update</button>
+                    <div>
+                        <h3 class="text-xl font-semibold mb-2">Options</h3>
+                        <form id="options-form" class="space-y-4"></form>
+                    </div>
+
+                    <div>
+                        <h3 class="text-xl font-semibold mb-2">System</h3>
+                        <div class="mt-2 flex space-x-2 items-center">
+                            <input type="text" id="update-tag" class="border rounded px-2 py-2" placeholder="Version (e.g. v1.5.0)">
+                            <button onclick="applyUpdate()" class="bg-blue-500 text-white px-4 py-2 rounded">Apply Update</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -753,9 +754,7 @@
         }
 
         function init() {
-            setupCollapsible('zones', 'zones-content');
-            setupCollapsible('options', 'options-form');
-            setupCollapsible('system', 'system-content');
+            setupCollapsible('settings', 'settings-content');
 
             fetch('/config')
                 .then(response => response.json())
