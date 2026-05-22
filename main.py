@@ -12,7 +12,7 @@ import urequests as requests
 from uos import rename, remove, stat
 
 # Global variables
-VERSION = "v1.5.1"  # DO NOT EDIT: This line is automatically updated by the version-bump workflow
+VERSION = "v1.6.0"  # DO NOT EDIT: This line is automatically updated by the version-bump workflow
 MICROPYTHON_TO_TIMESTAMP: int = 946684800  # 2000-1970 --> 3155673600 - 2208988800
 TIMESTAMP_2001_01_01: int = (
     978307200  # Monday, This is the date used when ntp is not available
@@ -898,7 +898,9 @@ async def handle_put_reboot(writer, **kwargs):
 async def handle_update_by_tag(writer, query_params, **kwargs):
     tag = query_params.get("tag")
     if not tag:
-        await send_response(writer, "text/html", "Error: 'tag' parameter is missing.", status_code=400)
+        await send_response(
+            writer, "text/html", "Error: 'tag' parameter is missing.", status_code=400
+        )
         return
 
     info(None, None, f"Received update request for tag: {tag}")
@@ -909,7 +911,9 @@ async def handle_update_by_tag(writer, query_params, **kwargs):
         return True
     except Exception as e:
         error(None, None, f"Failed to save update tag: {e}")
-        await send_response(writer, "text/html", f"Error saving update tag: {e}", status_code=500)
+        await send_response(
+            writer, "text/html", f"Error saving update tag: {e}", status_code=500
+        )
 
 
 async def handle_not_found(writer, method, path, **kwargs):
@@ -1061,9 +1065,10 @@ async def run_setup_mode_if_needed(button_pin_id: int, wait_time: int) -> None:
         info(None, None, "Server listening on port 80")
         await server.wait_closed()
 
+
 async def process_ota_update():
-    github_repo_owner = 'karpada'
-    github_repo_name = 'RSI'
+    github_repo_owner = "karpada"
+    github_repo_name = "RSI"
     try:
         stat("update_tag.txt")
         info(None, None, "Starting OTA update...")
