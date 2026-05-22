@@ -198,6 +198,10 @@
             display: block;
         }
 
+        .overflow-x-auto {
+            overflow-x: auto;
+        }
+
         /* Custom styles */
         .collapsible-content {
             max-height: 0;
@@ -332,7 +336,7 @@
                     <button type="button" onclick="triggerPauseSchedules()" class="bg-orange-500 text-white px-4 py-2 rounded">Pause (h)</button>
                     <input type="number" id="pause-duration" class="border rounded px-2 py-2" placeholder="Duration(hours)" style="width: 70px;">
                 </div>
-                <div id="schedules-table"></div>
+                <div id="schedules-table" class="overflow-x-auto"></div>
                 <div class="mt-2 flex space-x-2">
                     <button onclick="addSchedule()" class="bg-blue-500 text-white px-4 py-2 rounded">Add Schedule</button>
                 </div>
@@ -348,7 +352,7 @@
                 <div id="settings-content" class="collapsible-content space-y-6">
                     <div>
                         <h3 class="text-xl font-semibold mb-2">Zones</h3>
-                        <div id="zones-table"></div>
+                        <div id="zones-table" class="overflow-x-auto"></div>
                         <div class="mt-2 flex space-x-2">
                             <button onclick="addZone()" class="bg-blue-500 text-white px-4 py-2 rounded">Add Zone</button>
                         </div>
@@ -383,7 +387,7 @@
 
         <div class="mt-4 bg-white p-4 rounded shadow">
             <h2 class="text-xl font-semibold mb-2">Log</h2>
-            <div id="log-content">
+            <div id="log-content" class="overflow-x-auto">
                 <table class="w-full">
                     <thead>
                         <tr>
