@@ -1,6 +1,6 @@
 import sys
 from collections import namedtuple, deque
-from gc import mem_alloc, mem_free
+from gc import collect, mem_alloc, mem_free
 import network
 import utime as time
 from machine import RTC, Pin, ADC, PWM, reset, freq
@@ -660,13 +660,16 @@ def get_soil_moisture_milli(zone_id: int, raw_reading: int = None) -> int:
 
 
 async def store_file(reader, length: int, filename: str) -> None:
-    tmp_filename = f"upload-{time.ticks_ms()}-{id(reader)}.tmp"
+    tmp_filename = f"upload-{filename}.tmp"
     received = 0
     try:
         buf = memoryview(bytearray(512))
         with open(tmp_filename, "wb") as f:
             while received < length:
-                chunk_length = await reader.readinto(buf)
+                chunk_length = reader.readinto(buf)
+                # Check if it's a coroutine (awaitable generator) by looking for 'send'
+                if hasattr(chunk_length, "send"):
+                    chunk_length = await chunk_length
                 if chunk_length == 0:
                     break
                 f.write(buf[:chunk_length])
@@ -683,6 +686,19 @@ async def store_file(reader, length: int, filename: str) -> None:
         except Exception:
             pass
         raise
+
+
+async def store_url(url: str, filename: str) -> None:
+    response = requests.get(url)
+    try:
+        if response.status_code != 200:
+            raise Exception(f"HTTP Error {response.status_code}")
+
+        headers = getattr(response, "headers", {})
+        length = int(headers.get("content-length", headers.get("Content-Length")))
+        await store_file(response.raw, length, filename)
+    finally:
+        response.close()
 
 
 async def serve_file(filename: str, writer) -> None:
@@ -879,6 +895,23 @@ async def handle_put_reboot(writer, **kwargs):
     return True  # Signal for reboot
 
 
+async def handle_update_by_tag(writer, query_params, **kwargs):
+    tag = query_params.get("tag")
+    if not tag:
+        await send_response(writer, "text/html", "Error: 'tag' parameter is missing.", status_code=400)
+        return
+
+    info(None, None, f"Received update request for tag: {tag}")
+    try:
+        with open("update_tag.txt", "w") as f:
+            f.write(tag)
+        await send_response(writer, "text/html", "OK")
+        return True
+    except Exception as e:
+        error(None, None, f"Failed to save update tag: {e}")
+        await send_response(writer, "text/html", f"Error saving update tag: {e}", status_code=500)
+
+
 async def handle_not_found(writer, method, path, **kwargs):
     response = f"Resource not found: method={method} path={path}"
     await send_response(writer, "text/html", response, status_code=404)
@@ -899,6 +932,7 @@ ROUTES = {
     ("GET", "/log"): handle_get_log,
     ("GET", "/logtsv"): handle_get_logtsv,
     ("PUT", "/reboot"): handle_put_reboot,
+    ("PUT", "/update"): handle_update_by_tag,
 }
 
 
@@ -1027,6 +1061,42 @@ async def run_setup_mode_if_needed(button_pin_id: int, wait_time: int) -> None:
         info(None, None, "Server listening on port 80")
         await server.wait_closed()
 
+async def process_ota_update():
+    github_repo_owner = 'karpada'
+    github_repo_name = 'RSI'
+    try:
+        stat("update_tag.txt")
+        info(None, None, "Starting OTA update...")
+        with open("update_tag.txt", "r") as f:
+            tag = f.read().strip()
+        info(None, None, f"Processing OTA update for tag: {tag}")
+        remove("update_tag.txt")
+
+        files_to_update = ["index.html", "setup.html", "main.py"]
+        success = True
+        for filename in files_to_update:
+            try:
+                info(None, None, f"Attempting to update {filename} for tag {tag}")
+                raw_url = f"https://raw.githubusercontent.com/{github_repo_owner}/{github_repo_name}/{tag}/{filename}"
+                collect()
+
+                await store_url(raw_url, f"{filename}.ota")
+                info(None, None, f"Successfully downloaded {filename}")
+            except Exception as e:
+                error(None, None, f"Failed to download {filename}: {e}")
+                success = False
+                break
+        if success:
+            for filename in files_to_update:
+                rename(f"{filename}.ota", filename)
+            info(None, None, f"Update to tag '{tag}' successful. Rebooting...")
+            await asyncio.sleep(1)
+            reset()
+        else:
+            error(None, None, f"Update to tag '{tag}' failed for some files.")
+    except OSError:
+        pass
+
 
 async def main():
     global valve_status
@@ -1053,7 +1123,7 @@ async def main():
     info(
         None,
         None,
-        f"Starting RSI on [{sys.implementation._machine}] detected as {bootstrap}",
+        f"Starting RSI {VERSION} on [{sys.implementation._machine}] detected as {bootstrap}",
     )
     heartbeat_pin_id = bootstrap.heartbeat_pin_id
     heartbeat_high_is_on = bootstrap.heartbeat_high_is_on
@@ -1070,6 +1140,9 @@ async def main():
     await apply_valves(0)
 
     await connect_wifi()
+
+    await process_ota_update()
+
     asyncio.create_task(keep_wifi_connected())
     asyncio.create_task(periodic_ntp_sync())
     asyncio.create_task(send_metrics())

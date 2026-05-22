@@ -358,6 +358,16 @@
                 <form id="options-form" class="collapsible-content space-y-4"></form>
             </div>
 
+            <div class="bg-white p-4 rounded shadow">
+                <h2 id="system" class="text-xl font-semibold mb-2">> System</h2>
+                <div id="system-content" class="collapsible-content">
+                    <div class="mt-2 flex space-x-2 items-center">
+                        <input type="text" id="update-tag" class="border rounded px-2 py-2" placeholder="Version (e.g. v1.5.0)">
+                        <button onclick="applyUpdate()" class="bg-blue-500 text-white px-4 py-2 rounded">Apply Update</button>
+                    </div>
+                </div>
+            </div>
+
             <div class="mt-4 flex space-x-2">
                 <button onclick="postConfig()" class="bg-orange-500 text-white px-6 py-2 rounded text-lg">Apply</button>
                 <a href="/config" download="irrigation-config.json"><button class="bg-green-500 text-white px-6 py-2 rounded text-lg">Save As...</button></a>
@@ -727,9 +737,26 @@
             `).join('');
         }
 
+        async function fetchLatestVersion() {
+            try {
+                const response = await fetch('https://api.github.com/repos/karpada/RSI/tags');
+                if (response.ok) {
+                    const data = await response.json();
+                    const tagInput = document.getElementById('update-tag');
+                    if (!tagInput.value && data.length > 0) {
+                        tagInput.value = data[0].name;
+                    }
+                }
+            } catch (error) {
+                console.error('Error fetching latest version:', error);
+            }
+        }
+
         function init() {
             setupCollapsible('zones', 'zones-content');
             setupCollapsible('options', 'options-form');
+            setupCollapsible('system', 'system-content');
+
             fetch('/config')
                 .then(response => response.json())
                 .then(data => {
@@ -740,7 +767,34 @@
                     populateAdhocZones();
                 });
             updateStatus();
+            fetchLatestVersion();
             setInterval(updateStatus, 11000);
+        }
+
+        async function applyUpdate() {
+            const tag = document.getElementById('update-tag').value;
+
+            if (!tag) {
+                alert('Please enter a version tag to update to.');
+                return;
+            }
+
+            if (!confirm(`Are you sure you want to update to version ${tag}? The device will reboot.`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/update?tag=${tag}`, { method: 'PUT' });
+                if (response.ok) {
+                    alert(`Update initiated for ${tag}. Device is rebooting...`);
+                } else {
+                    const errorText = await response.text();
+                    alert(`Update failed: ${response.status} - ${errorText}`);
+                }
+            } catch (error) {
+                console.error('Error applying update:', error);
+                alert(`Error applying update: ${error.message}`);
+            }
         }
 
         init();
