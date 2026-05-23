@@ -413,6 +413,14 @@
             header.addEventListener('click', () => {
                 content.style.maxHeight = content.style.maxHeight ? null : content.scrollHeight + "px";
             });
+
+            // Automatically resize if the content changes while it is expanded
+            const observer = new MutationObserver(() => {
+                if (content.style.maxHeight) {
+                    content.style.maxHeight = content.scrollHeight + "px";
+                }
+            });
+            observer.observe(content, { childList: true, subtree: true });
         }
 
         let config = { zones: [], schedules: [] };
