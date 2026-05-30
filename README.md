@@ -114,9 +114,9 @@ If you already have a running version of RSI, you can use the web interface to u
 
 Once the RSI software is on the device, you need to configure it to connect to your local WiFi network.
 
-1.  **Enter WiFi Setup Mode:**
-    *   On first boot with a fresh `rsi-config.json` or no `rsi-config.json`, the device will automatically enter setup mode.
-    *   Alternatively, you can force setup mode by pressing and holding the `BOOT` button (usually GPIO0) on your ESP32 board within the first second of power-on. The onboard LED will blink rapidly to indicate it's in setup mode.
+1.  **Enter WiFi Provisioning Mode:**
+    *   On initial setup, the device automatically enters WiFi provisioning mode if the config file is not found.
+    *   Alternatively, you can force WiFi provisioning mode by pressing and holding the `BOOT` button (usually GPIO0) on your ESP32 board within the first second of power-on. The onboard LED will blink rapidly to indicate it's in WiFi provisioning mode.
 
 2.  **Connect to the Device's WiFi:**
     *   The device will create its own WiFi hotspot.
@@ -214,15 +214,23 @@ Advanced settings for time synchronization when NTP is unavailable (uses MCU tem
 - **Open**: Upload a previously saved configuration file
 
 ## Uploading a new version
-Below example uploads latest version, to upload a specific version use a tag, e.g. `VERSION="v1.2.3"`:
+
+### OTA Update (Recommended)
+You can easily update your device directly from the web interface. It will automatically download the latest version and reboot to apply the changes.
+
+### Command Line OTA Update (Advanced)
+To initiate an update via command line, send a `PUT` request to the `/update` endpoint:
 ```shell
 $ HOST="s2demo.local"
-$ VERSION="origin/main"
-$ for f in index.html setup.html main.py; do git cat-file -p $VERSION:$f | curl -X POST --data-binary @- $HOST/file/$f | jq; done
+$ curl -X PUT "http://$HOST/update?tag=v1.8.2"
+```
+
+### Manual Upload (via cURL)
+This method is particularly useful for development. If you need to upload local modifications or cannot use the OTA feature, you can upload files manually from your local directory:
+
+```shell
+$ HOST="s2demo.local"
+$ for f in index.html setup.html main.py; do curl -X POST --data-binary @$f $HOST/file/$f | jq; done
 $ curl -X PUT $HOST/reboot
 $ curl $HOST/status | jq
-```
-Upload from local dir (one-liner):
-```shell
-$ HOST="s2demo.local" && for f in index.html setup.html main.py; do curl -X POST --data-binary @$f $HOST/file/$f | jq; done && curl -X PUT $HOST/reboot && curl $HOST/status | jq
 ```
