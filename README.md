@@ -151,7 +151,7 @@ Each zone represents a valve or irrigation output that can be controlled indepen
 1. **Active is High**: Check if the valve is activated when the GPIO pin is set to HIGH (unchecked means valve activates on LOW)
 1. **On Pin**: GPIO pin number to turn the valve on (for latching valves, this is the "open" pin)
 1. **Off Pin**: GPIO pin number to turn the valve off (for latching valves, this is the "close" pin; for regular valves, same as On Pin)
-1. **Irrigation Factor Override**: Manual override for irrigation duration factor (-1 = use automatic calculation based on soil moisture)
+1. **Irrigation Factor Override**: Manual override for irrigation duration factor (-1 = disabled, use schedule duration as is)
 1. **Soil Moisture Dry**: ADC reading value considered "dry" (irrigation starts below this value)
 1. **Soil Moisture Wet**: ADC reading value considered "wet" (irrigation stops above this value)
 1. **Soil Moisture ADC Pin**: GPIO pin connected to the analog output of the [soil moisture sensor](#soil-moisture-sensor-optional)
@@ -210,15 +210,22 @@ Advanced settings for time synchronization when NTP is unavailable (uses MCU tem
 1. **slices_per_day**: Number of temperature measurements per day (default: 48 = every 30 minutes)
 1. **samples_per_slice**: Number of temperature readings per slice for averaging (default: 15)
 
+### System
+- **Apply Update**: Manually trigger an OTA update to a specific version tag. The latest version tag is automatically fetched from GitHub.
+
 ### Configuration Actions
 - **Apply**: Save the current configuration to the device
 - **Save As**: Download the configuration as a JSON file for backup
 - **Open**: Upload a previously saved configuration file
 
+### Status & Logs
+- **Status**: Real-time overview of the system state, including MCU temperature, memory usage, valve status, schedule status, and sensor readings.
+- **Log**: View the latest system events, warnings, and errors directly in the web interface.
+
 ## Uploading a new version
 
 ### OTA Update (Recommended)
-You can easily update your device directly from the web interface. It will automatically download the latest version and reboot to apply the changes.
+You can easily update your device directly from the web interface under **Settings > System**. The device will fetch the latest version tag from GitHub automatically, or you can manually enter a specific version tag. Click "Apply Update" to download the files and reboot.
 
 ### Manual Upload (via cURL)
 This method is particularly useful for development. If you wish to upload local modifications, you can upload files manually:
