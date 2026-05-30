@@ -218,16 +218,8 @@ Advanced settings for time synchronization when NTP is unavailable (uses MCU tem
 ### OTA Update (Recommended)
 You can easily update your device directly from the web interface. It will automatically download the latest version and reboot to apply the changes.
 
-### Command Line OTA Update (Advanced)
-To initiate an update via command line, send a `PUT` request to the `/update` endpoint:
-```shell
-$ HOST="s2demo.local"
-$ curl -X PUT "http://$HOST/update?tag=v1.8.2"
-```
-
 ### Manual Upload (via cURL)
-This method is particularly useful for development. If you need to upload local modifications or cannot use the OTA feature, you can upload files manually from your local directory:
-
+This method is particularly useful for development. If you wish to upload local modifications, you can upload files manually:
 ```shell
 $ HOST="s2demo.local"
 $ for f in index.html setup.html main.py; do curl -X POST --data-binary @$f $HOST/file/$f | jq; done

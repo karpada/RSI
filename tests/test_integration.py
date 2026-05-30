@@ -69,7 +69,6 @@ class TestRsiApi(unittest.TestCase):
         except requests.exceptions.RequestException as e:
             self.fail(f"Failed to connect to device at {BASE_URL}. Error: {e}")
 
-
     def test_04_get_root(self):
         """Tests that GET / serves the correct index.html page."""
         print("--> Testing GET / content...")
