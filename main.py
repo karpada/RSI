@@ -80,7 +80,7 @@ def load_from_json(filename: str) -> dict:
     try:
         with open(filename, "r", encoding="utf-8") as f:
             return ujson.load(f)
-    except Exception as e:
+    except (OSError, ValueError) as e:
         error(None, None, f"Error in load_from_json(): {e}")
         return None
 
@@ -114,7 +114,7 @@ async def connect_wifi() -> None:
             return
         wlan.active(False)
         warn(None, None, "network connection failed, retrying in 60 seconds")
-    except Exception as e:
+    except (OSError, ValueError) as e:
         wlan.active(False)
         warn(None, None, f"Exception while connecting to wifi: {e}")
 
@@ -137,7 +137,7 @@ async def sync_ntp() -> bool:
             f"@{time.time()} NTP synced, UTC time={time.time() + MICROPYTHON_TO_TIMESTAMP} Local time(GMT{config['options']['settings']['timezone_offset']:+})={time.time() + micropython_to_localtime}",
         )
         return True
-    except Exception:
+    except OSError:
         warn(
             None,
             None,
@@ -229,7 +229,7 @@ async def fallback_time_sync():
                     None,
                     f"it's {hours_till_6_15am} hours till 6:15am, adjusted RTC by {adjustment_hours:+}h ({rtc_hour_gmt} -> {now_hours_gmt}), temperature log: {temperature_log}",
                 )
-        except Exception as e:
+        except (OSError, ValueError, TypeError) as e:
             error(None, None, f"Error in fallback_time_sync: {e}")
     info(None, None, "synced, fallback_time_sync ended")
 
@@ -679,11 +679,11 @@ async def store_file(reader, length: int, filename: str) -> None:
                 f"Incomplete upload for {filename}: expected {length} bytes, received {received} bytes"
             )
         rename(tmp_filename, filename)
-    except Exception as e:
+    except (OSError, ValueError) as e:
         error(None, None, f"Error storing [{filename}]: {e}")
         try:
             remove(tmp_filename)
-        except Exception:
+        except OSError:
             pass
         raise
 
@@ -692,7 +692,7 @@ async def store_url(url: str, filename: str) -> None:
     response = requests.get(url)
     try:
         if response.status_code != 200:
-            raise Exception(f"HTTP Error {response.status_code}")
+            raise RuntimeError(f"HTTP Error {response.status_code}")
 
         headers = getattr(response, "headers", {})
         length = int(headers.get("content-length", headers.get("Content-Length")))
@@ -708,7 +708,7 @@ async def serve_file(filename: str, writer) -> None:
             while (length := f.readinto(buf)) > 0:
                 writer.write(buf[:length])
                 await writer.drain()
-    except Exception as e:
+    except OSError as e:
         error(None, None, f"Error serving [{filename}]: {e}")
         raise
 
@@ -909,7 +909,7 @@ async def handle_update_by_tag(writer, query_params, **kwargs):
             f.write(tag)
         await send_response(writer, "text/html", "OK")
         return True
-    except Exception as e:
+    except OSError as e:
         error(None, None, f"Failed to save update tag: {e}")
         await send_response(
             writer, "text/html", f"Error saving update tag: {e}", status_code=500
@@ -996,7 +996,7 @@ async def handle_request(reader, writer):
         warn(None, None, f"failed handling request: {e}")
         try:
             await send_response(writer, "text/html", "Server Error", status_code=500)
-        except Exception as e2:
+        except OSError as e2:
             warn(None, None, f"failed sending error response: {e2}")
     finally:
         writer.close()
@@ -1034,7 +1034,7 @@ async def send_metrics():
                     + "&".join([f"{k}={v}" for k, v in params.items()]),
                     timeout=10,
                 ).close()
-        except Exception as e:
+        except OSError as e:
             warn(None, None, f"failed sending metrics: {e}")
         finally:
             await asyncio.sleep(config["options"]["monitoring"]["send_interval_sec"])
@@ -1087,7 +1087,7 @@ async def process_ota_update():
 
                 await store_url(raw_url, f"{filename}.ota")
                 info(None, None, f"Successfully downloaded {filename}")
-            except Exception as e:
+            except (OSError, RuntimeError) as e:
                 error(None, None, f"Failed to download {filename}: {e}")
                 success = False
                 break
