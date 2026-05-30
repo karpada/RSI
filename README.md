@@ -197,6 +197,8 @@ These settings are configured during the [First-Time Configuration](#first-time-
 1. **relay_pin_id**: GPIO pin ID of the master relay that powers valve drivers (default: -1 = disabled)
 1. **heartbeat_pin_id**: GPIO pin ID of the onboard LED for status indication (auto-detected based on board)
 1. **relay_active_is_high**: Check if master relay activates when pin is HIGH (default: false)
+1. **heartbeat_high_is_on**: Check if onboard LED activates when pin is HIGH (default: auto-detected based on board)
+1. **enable_power_saving_mode**: Enable/disable power saving mode, which puts the MCU to light sleep between tasks (default: false)
 
 #### log
 1. **level**: Minimum log level to record (10=debug, 20=info, 30=warning, default: 20)
