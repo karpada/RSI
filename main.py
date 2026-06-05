@@ -257,7 +257,7 @@ def control_watering(zone_id: int, start: bool) -> None:
     )
     if pulse_mode:
         # pulse the pin
-        Pin(pin_id, Pin.OUT).value(pin_value)
+        Pin(pin_id, Pin.OUT, value=pin_value)
         time.sleep(0.060)  # is precise timing really needed?
         Pin(pin_id, Pin.IN)
     else:
@@ -317,7 +317,7 @@ async def schedule_irrigation():
     await asyncio.sleep(5)
     while True:
         if heartbeat_pin_id > 0:
-            Pin(heartbeat_pin_id, Pin.OUT).value(1 if heartbeat_high_is_on else 0)
+            Pin(heartbeat_pin_id, Pin.OUT, value=1 if heartbeat_high_is_on else 0)
 
         local_timestamp = get_local_timestamp()
 
@@ -627,7 +627,7 @@ def read_soil_moisture_raw(zone_id: int) -> int:
     if 0 > soil_moisture_config["adc_pin_id"]:
         return None
     if 0 <= soil_moisture_config["power_pin_id"]:
-        Pin(soil_moisture_config["power_pin_id"], Pin.OUT).value(1)
+        Pin(soil_moisture_config["power_pin_id"], Pin.OUT, value=1)
         time.sleep_ms(10)  # Use blocking sleep since this function is synchronous
     # https://docs.micropython.org/en/latest/esp32/quickref.html#adc-analog-to-digital-conversion
     adc = ADC(soil_moisture_config["adc_pin_id"], atten=ADC.ATTN_11DB)
