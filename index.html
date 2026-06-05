@@ -331,23 +331,6 @@
         </div>
         <div class="space-y-4">
             <div class="bg-white p-4 rounded shadow">
-                <h2 class="text-xl font-semibold mb-2">Schedules</h2>
-                <div class="mt-2 flex space-x-2">
-                    <button type="button" onclick="triggerPauseSchedules()" class="bg-orange-500 text-white px-4 py-2 rounded">Pause (h)</button>
-                    <input type="number" id="pause-duration" class="border rounded px-2 py-2" placeholder="Duration(hours)" style="width: 70px;">
-                </div>
-                <div id="schedules-table" class="overflow-x-auto"></div>
-                <div class="mt-2 flex space-x-2">
-                    <button onclick="addSchedule()" class="bg-blue-500 text-white px-4 py-2 rounded">Add Schedule</button>
-                </div>
-                <div class="mt-2 flex space-x-2">
-                    <button type="button" onclick="triggerAdhocIrrigation()" class="bg-blue-500 text-white px-4 py-2 rounded">Ad-hoc (m)</button>
-                    <select id="adhoc-zone" class="narrow border rounded px-2 py-2"></select>
-                    <input type="number" id="adhoc-duration" class="border rounded px-2 py-2" placeholder="Duration(minutes)" style="width: 70px;">
-                </div>
-            </div>
-
-            <div class="bg-white p-4 rounded shadow">
                 <h2 id="settings" class="cursor-pointer text-xl font-semibold mb-2">> Settings</h2>
                 <div id="settings-content" class="collapsible-content space-y-6">
                     <div>
@@ -370,6 +353,23 @@
                             <button onclick="applyUpdate()" class="bg-blue-500 text-white px-4 py-2 rounded">Apply Update</button>
                         </div>
                     </div>
+                </div>
+            </div>
+
+            <div class="bg-white p-4 rounded shadow">
+                <h2 class="text-xl font-semibold mb-2">Schedules</h2>
+                <div class="mt-2 flex space-x-2">
+                    <button type="button" onclick="triggerPauseSchedules()" class="bg-orange-500 text-white px-4 py-2 rounded">Pause (h)</button>
+                    <input type="number" id="pause-duration" class="border rounded px-2 py-2" placeholder="Duration(hours)" style="width: 70px;">
+                </div>
+                <div id="schedules-table" class="overflow-x-auto"></div>
+                <div class="mt-2 flex space-x-2">
+                    <button onclick="addSchedule()" class="bg-blue-500 text-white px-4 py-2 rounded">Add Schedule</button>
+                </div>
+                <div class="mt-2 flex space-x-2">
+                    <button type="button" onclick="triggerAdhocIrrigation()" class="bg-blue-500 text-white px-4 py-2 rounded">Ad-hoc (m)</button>
+                    <select id="adhoc-zone" class="narrow border rounded px-2 py-2"></select>
+                    <input type="number" id="adhoc-duration" class="border rounded px-2 py-2" placeholder="Duration(minutes)" style="width: 70px;">
                 </div>
             </div>
 
