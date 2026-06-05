@@ -508,8 +508,8 @@ async def apply_config(new_config: dict) -> None:
                 ),
                 "soil_moisture_dry": int(z.get("soil_moisture_dry", 300)),
                 "soil_moisture_wet": int(z.get("soil_moisture_wet", 700)),
-                "adc_pin_id": int(z.get("adc_pin_id", 12)),
-                "power_pin_id": int(z.get("power_pin_id", 13)),
+                "adc_pin_id": int(z.get("adc_pin_id", -1)),
+                "power_pin_id": int(z.get("power_pin_id", -1)),
             }
         )
     for s in new_config.get("schedules", []):
