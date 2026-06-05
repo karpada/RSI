@@ -256,16 +256,19 @@ def control_watering(zone_id: int, start: bool) -> None:
         f"Zone[{zone_id}]='{zone['name']}' (off_pin={zone['off_pin']}, on_pin={zone['on_pin']}) will be set {'OPEN' if start else 'CLOSE'} using{' pulse' if pulse_mode else ''} pin_id({pin_id}).value({pin_value})",
     )
     if pulse_mode:
+        other_pin_id = zone["off_pin"] if start else zone["on_pin"]
+        if other_pin_id >= 0:
+            Pin(other_pin_id, Pin.OUT, value=1 - pin_value)
         # pulse the pin
         Pin(pin_id, Pin.OUT, value=pin_value)
         time.sleep(0.060)  # is precise timing really needed?
-        Pin(pin_id, Pin.IN)
+        Pin(pin_id, Pin.OUT, value=1 - pin_value)
     else:
         # leave the pin in the state
         if start:
             Pin(pin_id, Pin.OUT, value=pin_value)
         else:
-            Pin(pin_id, Pin.IN)
+            Pin(pin_id, Pin.OUT, value=1 - pin_value)
 
 
 async def apply_valves(new_status: int) -> None:
@@ -289,7 +292,7 @@ async def apply_valves(new_status: int) -> None:
     valve_status = new_status
 
     if relay_pin_id >= 0:
-        Pin(relay_pin_id, Pin.IN)
+        Pin(relay_pin_id, Pin.OUT, value=1 - relay_value)
 
 
 ######################
@@ -477,7 +480,7 @@ async def schedule_irrigation():
         await apply_valves(valve_desired)
         schedule_status = new_schedule_status
         if heartbeat_pin_id > 0:
-            Pin(heartbeat_pin_id, Pin.IN)
+            Pin(heartbeat_pin_id, Pin.OUT, value=0 if heartbeat_high_is_on else 1)
         await asyncio.sleep(2)
 
 
@@ -636,7 +639,7 @@ def read_soil_moisture_raw(zone_id: int) -> int:
         raw_reading += adc.read_u16()
     raw_reading //= i + 1
     if soil_moisture_config["power_pin_id"] >= 0:
-        Pin(soil_moisture_config["power_pin_id"], Pin.IN)
+        Pin(soil_moisture_config["power_pin_id"], Pin.OUT, value=0)
     return raw_reading
 
 
@@ -1012,7 +1015,7 @@ async def handle_request(reader, writer):
         info(None, None, "Restarting...")
         await asyncio.sleep(1)
         if heartbeat_pin_id > 0:
-            Pin(heartbeat_pin_id, Pin.IN)
+            Pin(heartbeat_pin_id, Pin.OUT, value=0 if heartbeat_high_is_on else 1)
         reset()
 
 
