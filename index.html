@@ -375,7 +375,7 @@
 
             <div class="mt-4 flex space-x-2">
                 <button onclick="postConfig()" class="bg-orange-500 text-white px-6 py-2 rounded text-lg">Apply</button>
-                <a href="/config" download="irrigation-config.json"><button class="bg-green-500 text-white px-6 py-2 rounded text-lg">Save As...</button></a>
+                <a id="download-config-link" href="/config" download="rsi-config.json"><button class="bg-green-500 text-white px-6 py-2 rounded text-lg">Save As...</button></a>
                 <button onclick="restoreConfig()" class="bg-green-500 text-white px-6 py-2 rounded text-lg"><input type="file" id="restore-selector" accept=".json" style="display:none">Open...</button>
             </div>
         </div>
@@ -454,6 +454,7 @@
                 document.getElementById('hostname').textContent = status.hostname;
                 document.getElementById('boardname').textContent = status.machine;
                 document.getElementById('boardname').href = `https://www.google.com/search?udm=2&as_q=pinout+${status.machine}`;
+                document.getElementById('download-config-link').download = `rsi-config.${status.hostname}.json`;
 
                 config.zones.forEach((zone, index) => {
                     const zoneElement = document.getElementById(`zone${index}`);
