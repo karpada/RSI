@@ -44,28 +44,30 @@ LogLine = namedtuple(
 LOG = deque([], 25)
 
 
-def log(level: int, zone_id: int, schedule_id: int, message: str) -> None:
-    ts = get_local_timestamp()
-    print(f"@{ts} z{zone_id} s{schedule_id} {message}")
+def log(level: int, zone_id: int, schedule_id: int, message: str, *args) -> None:
     if config and level < config["options"]["log"]["level"]:
         return
+    if args:
+        message = message % args
+    ts = get_local_timestamp()
+    print(f"@{ts} z{zone_id} s{schedule_id} {message}")
     LOG.append(LogLine(ts, level, zone_id, schedule_id, message))
 
 
-def debug(zone_id: int, schedule_id: int, message: str) -> None:
-    log(10, zone_id, schedule_id, message)
+def debug(zone_id: int, schedule_id: int, message: str, *args) -> None:
+    log(10, zone_id, schedule_id, message, *args)
 
 
-def info(zone_id: int, schedule_id: int, message: str) -> None:
-    log(20, zone_id, schedule_id, message)
+def info(zone_id: int, schedule_id: int, message: str, *args) -> None:
+    log(20, zone_id, schedule_id, message, *args)
 
 
-def warn(zone_id: int, schedule_id: int, message: str) -> None:
-    log(30, zone_id, schedule_id, message)
+def warn(zone_id: int, schedule_id: int, message: str, *args) -> None:
+    log(30, zone_id, schedule_id, message, *args)
 
 
-def error(zone_id: int, schedule_id: int, message: str) -> None:
-    log(40, zone_id, schedule_id, message)
+def error(zone_id: int, schedule_id: int, message: str, *args) -> None:
+    log(40, zone_id, schedule_id, message, *args)
 
 
 # Persistent storage functions
@@ -187,7 +189,7 @@ async def fallback_time_sync():
                 + temperature
             )
             temperature_log_index += 1
-            debug(None, None, f"Temperature log: {temperature_log}")
+            debug(None, None, "Temperature log: %s", temperature_log)
             if temperature_log_index % sync_conf["slices_per_day"] == 0:
                 # assuming that minimum temperature is at 6:15am
                 hours_till_6_15am = (
@@ -221,7 +223,9 @@ async def fallback_time_sync():
                 debug(
                     None,
                     None,
-                    f"RTC before adjustment: {rtc.datetime()}, will assign={basetime}",
+                    "RTC before adjustment: %s, will assign=%s",
+                    rtc.datetime(),
+                    basetime,
                 )
                 rtc.datetime(basetime)
                 warn(
@@ -340,7 +344,10 @@ async def schedule_irrigation():
                 debug(
                     zone_id,
                     i,
-                    f"Schedule[{i}] zone[{zone_id}]='{z['name']}' disabled because all schedules is disabled",
+                    "Schedule[%s] zone[%s]='%s' disabled because all schedules is disabled",
+                    i,
+                    zone_id,
+                    z["name"],
                 )
                 continue
 
@@ -349,7 +356,10 @@ async def schedule_irrigation():
                 debug(
                     zone_id,
                     i,
-                    f"Schedule[{i}] zone[{zone_id}]='{z['name']}' disabled because schedule is disabled",
+                    "Schedule[%s] zone[%s]='%s' disabled because schedule is disabled",
+                    i,
+                    zone_id,
+                    z["name"],
                 )
                 continue
 
@@ -362,7 +372,10 @@ async def schedule_irrigation():
                 debug(
                     zone_id,
                     i,
-                    f"Schedule[{i}] zone[{zone_id}]='{z['name']}' disabled because duration_sec is zero",
+                    "Schedule[%s] zone[%s]='%s' disabled because duration_sec is zero",
+                    i,
+                    zone_id,
+                    z["name"],
                 )
                 continue
 
@@ -371,7 +384,10 @@ async def schedule_irrigation():
                 debug(
                     zone_id,
                     i,
-                    f"Schedule[{i}] zone[{zone_id}]='{z['name']}' disabled because schedule expired",
+                    "Schedule[%s] zone[%s]='%s' disabled because schedule expired",
+                    i,
+                    zone_id,
+                    z["name"],
                 )
                 continue
 
@@ -384,7 +400,11 @@ async def schedule_irrigation():
                 debug(
                     zone_id,
                     i,
-                    f"Schedule[{i}] zone[{zone_id}]='{z['name']}' suspended until next start: {schedule_completed_until[i]}",
+                    "Schedule[%s] zone[%s]='%s' suspended until next start: %s",
+                    i,
+                    zone_id,
+                    z["name"],
+                    schedule_completed_until[i],
                 )
                 continue
 
@@ -395,7 +415,13 @@ async def schedule_irrigation():
                 debug(
                     zone_id,
                     i,
-                    f"Schedule[{i}] zone[{zone_id}]='{z['name']}' suspended until next start {schedule_completed_until[i]} because of day_mask={s['day_mask']:07b} weekday={weekday}",
+                    "Schedule[%s] zone[%s]='%s' suspended until next start %s because of day_mask=%07b weekday=%s",
+                    i,
+                    zone_id,
+                    z["name"],
+                    schedule_completed_until[i],
+                    s["day_mask"],
+                    weekday,
                 )
                 continue
 
@@ -413,7 +439,12 @@ async def schedule_irrigation():
                         info(
                             zone_id,
                             i,
-                            f"Schedule[{i}] zone[{zone_id}]='{z['name']}' stopped and suspended until next start {schedule_completed_until[i]} because soil_moisture={soil_moisture} is wet",
+                            "Schedule[%s] zone[%s]='%s' stopped and suspended until next start %s because soil_moisture=%s is wet",
+                            i,
+                            zone_id,
+                            z["name"],
+                            schedule_completed_until[i],
+                            soil_moisture,
                         )
                         continue
                 else:
@@ -425,7 +456,12 @@ async def schedule_irrigation():
                         info(
                             zone_id,
                             i,
-                            f"Schedule[{i}] zone[{zone_id}]='{z['name']}' won't start and suspended until next start {schedule_completed_until[i]} because soil_moisture={soil_moisture} is not dry enough",
+                            "Schedule[%s] zone[%s]='%s' won't start and suspended until next start %s because soil_moisture=%s is not dry enough",
+                            i,
+                            zone_id,
+                            z["name"],
+                            schedule_completed_until[i],
+                            soil_moisture,
                         )
                         continue
 
