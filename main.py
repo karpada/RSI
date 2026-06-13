@@ -958,8 +958,8 @@ async def handle_request(reader, writer):
         query_params = (
             dict(
                 [
-                    param.replace("+", " ").split("=", 1)
-                    for param in query_params.split("&")
+                    p.replace("+", " ").split("=", 1) if "=" in p else (p, "")
+                    for p in query_params.split("&")
                 ]
             )
             if query_params
