@@ -601,8 +601,10 @@
 
         function updateZone(index, field, value) {
             config.zones[index][field] = value;
-            renderZones();
-            renderSchedules();
+            if (field === 'name' || field === 'master') {
+                renderSchedules();
+                populateAdhocZones();
+            }
         }
 
         function updateSchedule(index, field, value) {
@@ -619,7 +621,6 @@
             } else {
                 config.schedules[index][field] = value;
             }
-            renderSchedules();
         }
 
         function addZone() {
