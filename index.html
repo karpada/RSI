@@ -640,6 +640,9 @@
         }
 
         function removeZone(index) {
+            if (!confirm('Are you sure you want to remove this zone? This will also remove any schedules associated with it.')) {
+                return;
+            }
             config.zones.splice(index, 1);
             config.schedules = config.schedules.filter(schedule => schedule.zone_id !== index);
             config.schedules.forEach(schedule => {
@@ -669,6 +672,9 @@
         }
 
         function removeSchedule(index) {
+            if (!confirm('Are you sure you want to remove this schedule?')) {
+                return;
+            }
             config.schedules.splice(index, 1);
             renderSchedules();
         }
