@@ -517,6 +517,7 @@ async def schedule_irrigation():
         schedule_status = new_schedule_status
         if heartbeat_pin_id > 0:
             Pin(heartbeat_pin_id, Pin.OUT, value=0 if heartbeat_high_is_on else 1)
+        collect()
         await asyncio.sleep(2)
 
 
@@ -1046,6 +1047,7 @@ async def handle_request(reader, writer):
         None,
         f"Handled Request: {method:4} {path:14} in {time.ticks_ms() - req_start_time}ms",
     )
+    collect()
 
     if reboot:
         info(None, None, "Restarting...")
