@@ -12,7 +12,7 @@ import urequests as requests
 from uos import rename, remove, stat
 
 # Global variables
-VERSION = "v1.10.1"  # DO NOT EDIT: This line is automatically updated by the version-bump workflow
+VERSION = "v1.10.2"  # DO NOT EDIT: This line is automatically updated by the version-bump workflow
 MICROPYTHON_TO_TIMESTAMP: int = 946684800  # 2000-1970 --> 3155673600 - 2208988800
 TIMESTAMP_2001_01_01: int = (
     978307200  # Monday, This is the date used when ntp is not available
