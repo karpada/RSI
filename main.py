@@ -119,6 +119,7 @@ async def connect_wifi() -> None:
     except (OSError, ValueError) as e:
         wlan.active(False)
         warn(None, None, f"Exception while connecting to wifi: {e}")
+    collect()
 
 
 async def keep_wifi_connected():
@@ -1079,6 +1080,7 @@ async def send_metrics():
             warn(None, None, f"failed sending metrics: {e}")
         finally:
             await asyncio.sleep(config["options"]["monitoring"]["send_interval_sec"])
+        collect()
 
 
 async def run_setup_mode_if_needed(button_pin_id: int, wait_time: int) -> None:
