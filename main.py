@@ -21,37 +21,41 @@ TIMESTAMP_2025_01_01: int = (
     1735689600  # after ntp sync, date will be at least 2025-01-01
 )
 DEFAULT_FREQ = freq()
-WIFI_SETUP_MODE = False
-micropython_to_localtime: int = 0
-wlan: network.WLAN = network.WLAN(network.STA_IF)
-config: dict = None
-valve_status: int = 0
-schedule_status: int = 0
-heartbeat_pin_id: int = -1
-heartbeat_high_is_on: bool = True
-schedule_completed_until = []
-ad_hoc_irrigation_until = {}
+class GlobalAppState:
+    def __init__(self):
+        self.WIFI_SETUP_MODE = False
+        self.micropython_to_localtime: int = 0
+        self.wlan: network.WLAN = network.WLAN(network.STA_IF)
+        self.config: dict = None
+        self.valve_status: int = 0
+        self.schedule_status: int = 0
+        self.heartbeat_pin_id: int = -1
+        self.heartbeat_high_is_on: bool = True
+        self.schedule_completed_until = []
+        self.ad_hoc_irrigation_until = {}
+        self.LOG = deque([], 25)
+
+g = GlobalAppState()
 
 
 # logging
 def get_local_timestamp() -> int:
-    return time.time() + micropython_to_localtime
+    return time.time() + g.micropython_to_localtime
 
 
 LogLine = namedtuple(
     "LogLine", ["timestamp", "level", "zone_id", "schedule_id", "message"]
 )
-LOG = deque([], 25)
 
 
 def log(level: int, zone_id: int, schedule_id: int, message: str, *args) -> None:
-    if config and level < config["options"]["log"]["level"]:
+    if g.config and level < g.config["options"]["log"]["level"]:
         return
     if args:
         message = message % args
     ts = get_local_timestamp()
     print(f"@{ts} z{zone_id} s{schedule_id} {message}")
-    LOG.append(LogLine(ts, level, zone_id, schedule_id, message))
+    g.LOG.append(LogLine(ts, level, zone_id, schedule_id, message))
 
 
 def debug(zone_id: int, schedule_id: int, message: str, *args) -> None:
@@ -89,42 +93,42 @@ def load_from_json(filename: str) -> dict:
 
 async def connect_wifi() -> None:
     try:
-        if not config["options"]["wifi"]["ssid"]:
+        if not g.config["options"]["wifi"]["ssid"]:
             return
-        network.hostname(config["options"]["wifi"]["hostname"])
-        wlan.active(True)
-        wlan.config(
-            pm=wlan.PM_POWERSAVE
-            if config["options"]["settings"]["enable_power_saving_mode"]
-            else wlan.PM_PERFORMANCE
+        network.hostname(g.config["options"]["wifi"]["hostname"])
+        g.wlan.active(True)
+        g.wlan.config(
+            pm=g.wlan.PM_POWERSAVE
+            if g.config["options"]["settings"]["enable_power_saving_mode"]
+            else g.wlan.PM_PERFORMANCE
         )
         info(None, None, "Wifi connecting...")
-        wlan.connect(
-            config["options"]["wifi"]["ssid"], config["options"]["wifi"]["password"]
+        g.wlan.connect(
+            g.config["options"]["wifi"]["ssid"], g.config["options"]["wifi"]["password"]
         )
         for _ in range(15):
-            if wlan.isconnected():
+            if g.wlan.isconnected():
                 break
             await asyncio.sleep(1)
             print(".", end="")
-        if wlan.isconnected():
+        if g.wlan.isconnected():
             info(
                 None,
                 None,
-                f"Connected, ip = {wlan.ifconfig()[0]}, hostname={config['options']['wifi']['hostname']}",
+                f"Connected, ip = {g.wlan.ifconfig()[0]}, hostname={g.config['options']['wifi']['hostname']}",
             )
             return
-        wlan.active(False)
+        g.wlan.active(False)
         warn(None, None, "network connection failed, retrying in 60 seconds")
     except (OSError, ValueError) as e:
-        wlan.active(False)
+        g.wlan.active(False)
         warn(None, None, f"Exception while connecting to wifi: {e}")
     collect()
 
 
 async def keep_wifi_connected():
     while True:
-        while wlan.isconnected():
+        while g.wlan.isconnected():
             await asyncio.sleep(10)
         await asyncio.sleep(60)
         await connect_wifi()
@@ -137,7 +141,7 @@ async def sync_ntp() -> bool:
         info(
             None,
             None,
-            f"@{time.time()} NTP synced, UTC time={time.time() + MICROPYTHON_TO_TIMESTAMP} Local time(GMT{config['options']['settings']['timezone_offset']:+})={get_local_timestamp()}",
+            f"@{time.time()} NTP synced, UTC time={time.time() + MICROPYTHON_TO_TIMESTAMP} Local time(GMT{g.config['options']['settings']['timezone_offset']:+})={get_local_timestamp()}",
         )
         return True
     except OSError:
@@ -160,7 +164,7 @@ async def fallback_time_sync():
     await asyncio.sleep(5)
     if get_local_timestamp() > TIMESTAMP_2025_01_01:
         return
-    sync_conf = config["options"]["fallback_time_sync"]
+    sync_conf = g.config["options"]["fallback_time_sync"]
     warn(
         None,
         None,
@@ -202,7 +206,7 @@ async def fallback_time_sync():
                     48
                     + 6.25
                     - hours_till_6_15am
-                    - config["options"]["settings"]["timezone_offset"]
+                    - g.config["options"]["settings"]["timezone_offset"]
                 ) % 24
                 basetime = (
                     list(rtc.datetime())
@@ -241,10 +245,10 @@ async def fallback_time_sync():
 
 # Watering control functions
 def control_watering(zone_id: int, start: bool) -> None:
-    if zone_id < 0 or zone_id >= len(config["zones"]):
+    if zone_id < 0 or zone_id >= len(g.config["zones"]):
         warn(zone_id, None, "invalid zone_id")
         return
-    zone = config["zones"][zone_id]
+    zone = g.config["zones"][zone_id]
     pin_id = zone["on_pin"] if start else zone["off_pin"]
     if pin_id < 0:
         warn(
@@ -277,24 +281,23 @@ def control_watering(zone_id: int, start: bool) -> None:
 
 
 async def apply_valves(new_status: int) -> None:
-    global valve_status
-    if new_status == valve_status:
+    if new_status == g.valve_status:
         return
 
     debug(
-        None, None, f"apply_valves({new_status:08b}), valve_status={valve_status:08b}"
+        None, None, f"apply_valves({new_status:08b}), g.valve_status={g.valve_status:08b}"
     )
-    relay_pin_id = config["options"]["settings"]["relay_pin_id"]
+    relay_pin_id = g.config["options"]["settings"]["relay_pin_id"]
     if relay_pin_id >= 0:
-        relay_value = 1 if config["options"]["settings"]["relay_active_is_high"] else 0
+        relay_value = 1 if g.config["options"]["settings"]["relay_active_is_high"] else 0
         Pin(relay_pin_id, Pin.OUT, value=relay_value)
         await asyncio.sleep(0.250)  # wait for H-Bridges to power up
 
-    for i in range(len(config["zones"])):
-        if (valve_status ^ new_status) & (1 << i):
+    for i in range(len(g.config["zones"])):
+        if (g.valve_status ^ new_status) & (1 << i):
             control_watering(i, bool(new_status & (1 << i)))
             await asyncio.sleep(0.050)  # wait to settle down
-    valve_status = new_status
+    g.valve_status = new_status
 
     if relay_pin_id >= 0:
         Pin(relay_pin_id, Pin.OUT, value=1 - relay_value)
@@ -304,28 +307,27 @@ async def apply_valves(new_status: int) -> None:
 # Irrigation scheduler
 ######################
 async def schedule_irrigation():
-    global schedule_status
 
     await asyncio.sleep(5)
     while True:
-        if heartbeat_pin_id > 0:
-            Pin(heartbeat_pin_id, Pin.OUT, value=1 if heartbeat_high_is_on else 0)
+        if g.heartbeat_pin_id > 0:
+            Pin(g.heartbeat_pin_id, Pin.OUT, value=1 if g.heartbeat_high_is_on else 0)
 
         local_timestamp = get_local_timestamp()
 
         valve_desired = 0
         new_schedule_status = 0
-        for i, s in enumerate(config["schedules"]):
+        for i, s in enumerate(g.config["schedules"]):
             # debug(None, i, "checking schedule")
-            if local_timestamp < schedule_completed_until[i]:
+            if local_timestamp < g.schedule_completed_until[i]:
                 continue
 
             zone_id = s["zone_id"]
-            z = config["zones"][zone_id]
+            z = g.config["zones"][zone_id]
 
-            # following checks disabled the schedule until config change
-            if not config["options"]["settings"]["enable_irrigation_schedule"]:
-                schedule_completed_until[i] = sys.maxsize
+            # following checks disabled the schedule until g.config change
+            if not g.config["options"]["settings"]["enable_irrigation_schedule"]:
+                g.schedule_completed_until[i] = sys.maxsize
                 debug(
                     zone_id,
                     i,
@@ -337,7 +339,7 @@ async def schedule_irrigation():
                 continue
 
             if not s["enabled"]:
-                schedule_completed_until[i] = sys.maxsize
+                g.schedule_completed_until[i] = sys.maxsize
                 debug(
                     zone_id,
                     i,
@@ -353,7 +355,7 @@ async def schedule_irrigation():
                 duration_sec *= z["irrigation_factor_override"]
             duration_sec = min(round(duration_sec), 86400)
             if duration_sec <= 0:
-                schedule_completed_until[i] = sys.maxsize
+                g.schedule_completed_until[i] = sys.maxsize
                 debug(
                     zone_id,
                     i,
@@ -365,7 +367,7 @@ async def schedule_irrigation():
                 continue
 
             if s["expiry"] and local_timestamp > s["expiry"]:
-                schedule_completed_until[i] = sys.maxsize
+                g.schedule_completed_until[i] = sys.maxsize
                 debug(
                     zone_id,
                     i,
@@ -381,7 +383,7 @@ async def schedule_irrigation():
 
             if sec_till_start < sec_till_end:
                 # we are outside the schedule window = (start, end], skip till sec_till_start==86399
-                schedule_completed_until[i] = local_timestamp + sec_till_start + 1
+                g.schedule_completed_until[i] = local_timestamp + sec_till_start + 1
                 debug(
                     zone_id,
                     i,
@@ -389,14 +391,14 @@ async def schedule_irrigation():
                     i,
                     zone_id,
                     z["name"],
-                    schedule_completed_until[i],
+                    g.schedule_completed_until[i],
                 )
                 continue
 
             # weekday of current schedule start time, monday is 0, sunday is 6
             weekday = ((local_timestamp + sec_till_start) // 86400 + 2) % 7
             if not s["day_mask"] & (1 << weekday):
-                schedule_completed_until[i] = local_timestamp + sec_till_start + 1
+                g.schedule_completed_until[i] = local_timestamp + sec_till_start + 1
                 debug(
                     zone_id,
                     i,
@@ -404,7 +406,7 @@ async def schedule_irrigation():
                     i,
                     zone_id,
                     z["name"],
-                    schedule_completed_until[i],
+                    g.schedule_completed_until[i],
                     s["day_mask"],
                     weekday,
                 )
@@ -415,10 +417,10 @@ async def schedule_irrigation():
                 and (soil_moisture := get_soil_moisture_milli(s["zone_id"])) is not None
             ):
                 # soil_moisture value needs to be taken into account
-                if schedule_status & (1 << i):
+                if g.schedule_status & (1 << i):
                     # schedule is active, check if we should stop
                     if soil_moisture >= z["soil_moisture_wet"]:
-                        schedule_completed_until[i] = (
+                        g.schedule_completed_until[i] = (
                             local_timestamp + sec_till_start + 1
                         )
                         info(
@@ -428,14 +430,14 @@ async def schedule_irrigation():
                             i,
                             zone_id,
                             z["name"],
-                            schedule_completed_until[i],
+                            g.schedule_completed_until[i],
                             soil_moisture,
                         )
                         continue
                 else:
                     # schedule is about to start, is it dry enough?
                     if soil_moisture >= z["soil_moisture_dry"]:
-                        schedule_completed_until[i] = (
+                        g.schedule_completed_until[i] = (
                             local_timestamp + sec_till_start + 1
                         )
                         info(
@@ -445,7 +447,7 @@ async def schedule_irrigation():
                             i,
                             zone_id,
                             z["name"],
-                            schedule_completed_until[i],
+                            g.schedule_completed_until[i],
                             soil_moisture,
                         )
                         continue
@@ -465,11 +467,11 @@ async def schedule_irrigation():
             # debug(zone_id, i, f"valve_desired={valve_desired:08b} for schedule={s}")
 
         # check if we have ad-hoc irrigation
-        for zone_id, end_time in list(ad_hoc_irrigation_until.items()):
-            z = config["zones"][zone_id]
+        for zone_id, end_time in list(g.ad_hoc_irrigation_until.items()):
+            z = g.config["zones"][zone_id]
             if end_time > local_timestamp:
                 valve_desired |= 1 << zone_id
-                if not valve_status & (1 << zone_id):
+                if not g.valve_status & (1 << zone_id):
                     info(
                         zone_id,
                         None,
@@ -481,27 +483,27 @@ async def schedule_irrigation():
                     None,
                     f"Ad-hoc irrigation in zone[{zone_id}]='{z['name']}' has ended",
                 )
-                del ad_hoc_irrigation_until[zone_id]
+                del g.ad_hoc_irrigation_until[zone_id]
 
         # debug(None, None, f"valve_desired={valve_desired:08b}")
         if valve_desired > 0:
-            for i, zone in enumerate(config["zones"]):
+            for i, zone in enumerate(g.config["zones"]):
                 if zone["master"]:
                     valve_desired |= 1 << i
 
-        for i, s in enumerate(config["schedules"]):
-            if (schedule_status ^ new_schedule_status) & (1 << i):
+        for i, s in enumerate(g.config["schedules"]):
+            if (g.schedule_status ^ new_schedule_status) & (1 << i):
                 zone_id = s["zone_id"]
-                z = config["zones"][zone_id]
+                z = g.config["zones"][zone_id]
                 info(
                     s["zone_id"],
                     i,
                     f"Schedule[{i}] zone[{zone_id}]='{z['name']}' {'started' if new_schedule_status & (1 << i) else 'ended'} for zone {s['zone_id']} ({z['name']})",
                 )
         await apply_valves(valve_desired)
-        schedule_status = new_schedule_status
-        if heartbeat_pin_id > 0:
-            Pin(heartbeat_pin_id, Pin.OUT, value=0 if heartbeat_high_is_on else 1)
+        g.schedule_status = new_schedule_status
+        if g.heartbeat_pin_id > 0:
+            Pin(g.heartbeat_pin_id, Pin.OUT, value=0 if g.heartbeat_high_is_on else 1)
         collect()
         await asyncio.sleep(2)
 
@@ -520,18 +522,12 @@ def migrate_config_if_needed() -> None:
     except OSError:
         try:
             rename("config.json", CONFIG_FILENAME)
-            info(None, None, "Renamed config.json to rsi-config.json")
+            info(None, None, f"Renamed config.json to {CONFIG_FILENAME}")
         except OSError:
             pass  # old config does not exist, nothing to do
 
 
 async def apply_config(new_config: dict) -> None:
-    global config
-    global schedule_completed_until
-    global micropython_to_localtime
-    global heartbeat_pin_id
-    global heartbeat_high_is_on
-    global LOG
 
     info(None, None, f"Applying new config = {new_config}")
     normalized_config = {"zones": [], "schedules": [], "options": {}}
@@ -586,7 +582,7 @@ async def apply_config(new_config: dict) -> None:
             "hostname": str(
                 bo["wifi"].get(
                     "hostname",
-                    "rsi-" + "".join([f"{b:02x}" for b in wlan.config("mac")[3:6]]),
+                    "rsi-" + "".join([f"{b:02x}" for b in g.wlan.config("mac")[3:6]]),
                 )
             ),
         },
@@ -607,10 +603,10 @@ async def apply_config(new_config: dict) -> None:
             "timezone_offset": float(bo["settings"].get("timezone_offset", -7)),
             "relay_pin_id": int(bo["settings"].get("relay_pin_id", -1)),
             "heartbeat_pin_id": int(
-                bo["settings"].get("heartbeat_pin_id", heartbeat_pin_id)
+                bo["settings"].get("heartbeat_pin_id", g.heartbeat_pin_id)
             ),
             "heartbeat_high_is_on": bool(
-                bo["settings"].get("heartbeat_high_is_on", heartbeat_high_is_on)
+                bo["settings"].get("heartbeat_high_is_on", g.heartbeat_high_is_on)
             ),
             "relay_active_is_high": bool(
                 bo["settings"].get("relay_active_is_high", False)
@@ -633,38 +629,38 @@ async def apply_config(new_config: dict) -> None:
     }
 
     # if zones changed, turn off all valves
-    if config and config.get("zones", []) != normalized_config["zones"]:
+    if g.config and g.config.get("zones", []) != normalized_config["zones"]:
         await apply_valves(0)
 
     # log(None, None, f"apply_config({new_config})\n    normalized_config={normalized_config}")
-    config = normalized_config
+    g.config = normalized_config
 
-    micropython_to_localtime = MICROPYTHON_TO_TIMESTAMP + round(
-        config["options"]["settings"]["timezone_offset"] * 3600
+    g.micropython_to_localtime = MICROPYTHON_TO_TIMESTAMP + round(
+        g.config["options"]["settings"]["timezone_offset"] * 3600
     )
-    heartbeat_pin_id = config["options"]["settings"]["heartbeat_pin_id"]
-    heartbeat_high_is_on = config["options"]["settings"]["heartbeat_high_is_on"]
+    g.heartbeat_pin_id = g.config["options"]["settings"]["heartbeat_pin_id"]
+    g.heartbeat_high_is_on = g.config["options"]["settings"]["heartbeat_high_is_on"]
     # disable schedules until fallback_time_sync or NTP synchronization is complete
-    schedule_completed_until = [TIMESTAMP_2001_01_01] * len(config["schedules"])
-    LOG = deque(
-        [i for i in LOG if i.level >= config["options"]["log"]["level"]],
-        config["options"]["log"]["max_lines"],
+    g.schedule_completed_until = [TIMESTAMP_2001_01_01] * len(g.config["schedules"])
+    g.LOG = deque(
+        [i for i in g.LOG if i.level >= g.config["options"]["log"]["level"]],
+        g.config["options"]["log"]["max_lines"],
     )
     freq(
         80_000_000
-        if config["options"]["settings"]["enable_power_saving_mode"]
+        if g.config["options"]["settings"]["enable_power_saving_mode"]
         else DEFAULT_FREQ
     )
-    if wlan.active():
-        wlan.config(
-            pm=wlan.PM_POWERSAVE
-            if config["options"]["settings"]["enable_power_saving_mode"]
-            else wlan.PM_PERFORMANCE
+    if g.wlan.active():
+        g.wlan.config(
+            pm=g.wlan.PM_POWERSAVE
+            if g.config["options"]["settings"]["enable_power_saving_mode"]
+            else g.wlan.PM_PERFORMANCE
         )
 
 
 def read_soil_moisture_raw(zone_id: int) -> int:
-    soil_moisture_config = config["zones"][zone_id]
+    soil_moisture_config = g.config["zones"][zone_id]
     if 0 > soil_moisture_config["adc_pin_id"]:
         return None
     if 0 <= soil_moisture_config["power_pin_id"]:
@@ -673,7 +669,7 @@ def read_soil_moisture_raw(zone_id: int) -> int:
     # https://docs.micropython.org/en/latest/esp32/quickref.html#adc-analog-to-digital-conversion
     adc = ADC(soil_moisture_config["adc_pin_id"], atten=ADC.ATTN_11DB)
     raw_reading = 0
-    for i in range(config["options"]["soil_moisture_sensor"]["sample_count"]):
+    for i in range(g.config["options"]["soil_moisture_sensor"]["sample_count"]):
         raw_reading += adc.read_u16()
     raw_reading //= i + 1
     if soil_moisture_config["power_pin_id"] >= 0:
@@ -690,7 +686,7 @@ def get_soil_moisture_milli(zone_id: int, raw_reading: int = None) -> int:
     milli_moist = int((65.3 + raw_reading) // 65.6)
     return (
         1000 - milli_moist
-        if config["options"]["soil_moisture_sensor"]["high_is_dry"]
+        if g.config["options"]["soil_moisture_sensor"]["high_is_dry"]
         else milli_moist
     )
 
@@ -810,7 +806,7 @@ async def send_file(writer, content_type, filename, status_code=200):
 
 
 async def handle_get_root(writer, **kwargs):
-    filename = "setup.html" if WIFI_SETUP_MODE else "index.html"
+    filename = "setup.html" if g.WIFI_SETUP_MODE else "index.html"
     await send_file(writer, "text/html", filename)
 
 
@@ -820,7 +816,7 @@ async def handle_get_favicon(writer, **kwargs):
 
 
 async def handle_get_config(writer, **kwargs):
-    await send_json(writer, config)
+    await send_json(writer, g.config)
 
 
 async def handle_post_config(reader, content_length, writer, **kwargs):
@@ -830,29 +826,29 @@ async def handle_post_config(reader, content_length, writer, **kwargs):
         else None
     )
     await apply_config(body)
-    save_as_json(CONFIG_FILENAME, config)
-    await send_json(writer, config)
+    save_as_json(CONFIG_FILENAME, g.config)
+    await send_json(writer, g.config)
 
 
 async def handle_put_pause(writer, query_params, **kwargs):
     duration_sec = int(query_params.get("duration_sec", 0))
     schedule_pause_until = get_local_timestamp() + duration_sec
     info(None, None, f"Pausing schedule for {duration_sec} seconds")
-    schedule_completed_until[:] = [schedule_pause_until] * len(schedule_completed_until)
+    g.schedule_completed_until[:] = [schedule_pause_until] * len(g.schedule_completed_until)
     await send_json(writer, {"status": "ok"})
 
 
 async def handle_put_adhoc(writer, query_params, **kwargs):
     duration_sec = int(query_params.get("duration_sec", 0))
     zone_id = int(query_params.get("zone_id", -1))
-    if 0 <= zone_id < len(config["zones"]) and duration_sec >= 0:
+    if 0 <= zone_id < len(g.config["zones"]) and duration_sec >= 0:
         end_time = get_local_timestamp() + duration_sec
         debug(
             zone_id,
             None,
             f"Ad-hoc irrigation for zone {zone_id} of {duration_sec}s (until {end_time})",
         )
-        ad_hoc_irrigation_until[zone_id] = end_time
+        g.ad_hoc_irrigation_until[zone_id] = end_time
     await send_json(writer, {"status": "ok"})
 
 
@@ -881,24 +877,24 @@ async def handle_get_status(writer, **kwargs):
         "local_timestamp": now,
         "soil_moisture": {
             z["name"]: get_soil_moisture_milli(i)
-            for i, z in enumerate(config["zones"])
+            for i, z in enumerate(g.config["zones"])
             if z["adc_pin_id"] >= 0 and not z["master"]
         },
         "machine": sys.implementation._machine,
         "gc.mem_alloc": mem_alloc(),
         "gc.mem_free": mem_free(),
-        "valve_status": f"{valve_status:08b}",
-        "schedule_status": f"{schedule_status:08b}",
+        "valve_status": f"{g.valve_status:08b}",
+        "schedule_status": f"{g.schedule_status:08b}",
         "mcu_temperature": mcu_temperature(),
         "schedule_completed_until": [
-            max(t - now, -1) for t in schedule_completed_until
+            max(t - now, -1) for t in g.schedule_completed_until
         ],
         "ad_hoc_irrigation": {
-            f"Zone[{zone_id}]='{config['zones'][zone_id]['name']}'": max(t - now, -1)
-            for zone_id, t in ad_hoc_irrigation_until.items()
+            f"Zone[{zone_id}]='{g.config['zones'][zone_id]['name']}'": max(t - now, -1)
+            for zone_id, t in g.ad_hoc_irrigation_until.items()
         },
-        "hostname": config["options"]["wifi"]["hostname"],
-        "mac_address": ":".join([f"{b:02x}" for b in wlan.config("mac")]),
+        "hostname": g.config["options"]["wifi"]["hostname"],
+        "mac_address": ":".join([f"{b:02x}" for b in g.wlan.config("mac")]),
     }
     await send_json(writer, response)
 
@@ -915,7 +911,7 @@ async def handle_get_log(writer, **kwargs):
                 "schedule_id": i.schedule_id,
                 "message": i.message,
             }
-            for i in LOG
+            for i in g.LOG
         ],
     }
     await send_json(writer, response)
@@ -925,7 +921,7 @@ async def handle_get_logtsv(writer, **kwargs):
     response = "\n".join(
         [
             f"{i.timestamp}\t{i.level}\t{i.zone_id}\t{i.schedule_id}\t{i.message}"
-            for i in LOG
+            for i in g.LOG
         ]
     )
     await send_response(writer, "text/tab-separated-values", response)
@@ -1053,23 +1049,23 @@ async def handle_request(reader, writer):
     if reboot:
         info(None, None, "Restarting...")
         await asyncio.sleep(1)
-        if heartbeat_pin_id > 0:
-            Pin(heartbeat_pin_id, Pin.OUT, value=0 if heartbeat_high_is_on else 1)
+        if g.heartbeat_pin_id > 0:
+            Pin(g.heartbeat_pin_id, Pin.OUT, value=0 if g.heartbeat_high_is_on else 1)
         reset()
 
 
 async def send_metrics():
     while True:
         try:
-            metrics = [mcu_temperature(), valve_status] + [
+            metrics = [mcu_temperature(), g.valve_status] + [
                 get_soil_moisture_milli(i)
-                for i, z in enumerate(config["zones"])
+                for i, z in enumerate(g.config["zones"])
                 if z["adc_pin_id"] >= 0 and not z["master"]
             ]
             # mem_alloc(), mcu_temperature()
-            if "thingsspeak_apikey" in config["options"]["monitoring"]:
+            if "thingsspeak_apikey" in g.config["options"]["monitoring"]:
                 params = {
-                    "api_key": config["options"]["monitoring"]["thingsspeak_apikey"]
+                    "api_key": g.config["options"]["monitoring"]["thingsspeak_apikey"]
                 } | {f"field{i + 1}": m for i, m in enumerate(metrics)}
                 requests.get(
                     "http://api.thingspeak.com/update?"
@@ -1079,28 +1075,27 @@ async def send_metrics():
         except OSError as e:
             warn(None, None, f"failed sending metrics: {e}")
         finally:
-            await asyncio.sleep(config["options"]["monitoring"]["send_interval_sec"])
+            await asyncio.sleep(g.config["options"]["monitoring"]["send_interval_sec"])
         collect()
 
 
 async def run_setup_mode_if_needed(button_pin_id: int, wait_time: int) -> None:
-    global WIFI_SETUP_MODE
 
     try:
         stat(CONFIG_FILENAME)
     except OSError:
-        WIFI_SETUP_MODE = True
+        g.WIFI_SETUP_MODE = True
 
-    if not WIFI_SETUP_MODE and button_pin_id >= 0:
+    if not g.WIFI_SETUP_MODE and button_pin_id >= 0:
         for _ in range(round(wait_time * 10)):
             await asyncio.sleep(0.1)
             if 0 == Pin(button_pin_id, Pin.IN, Pin.PULL_UP).value():
-                WIFI_SETUP_MODE = True
+                g.WIFI_SETUP_MODE = True
                 break
 
-    if WIFI_SETUP_MODE:
-        if heartbeat_pin_id >= 0:
-            PWM(Pin(heartbeat_pin_id), freq=5, duty_u16=32768)
+    if g.WIFI_SETUP_MODE:
+        if g.heartbeat_pin_id >= 0:
+            PWM(Pin(g.heartbeat_pin_id), freq=5, duty_u16=32768)
         ap = network.WLAN(network.AP_IF)
         ap.active(True)
         ap.config(essid="irrigation-esp32")
@@ -1147,9 +1142,6 @@ async def process_ota_update():
 
 
 async def main():
-    global valve_status
-    global heartbeat_pin_id
-    global heartbeat_high_is_on
 
     if sys.maxsize >> 30 == 0:
         warn(None, None, ">>> We have less than 31 bits :(")
@@ -1173,8 +1165,8 @@ async def main():
         None,
         f"Starting RSI {VERSION} on [{sys.implementation._machine}] detected as {bootstrap}",
     )
-    heartbeat_pin_id = bootstrap.heartbeat_pin_id
-    heartbeat_high_is_on = bootstrap.heartbeat_high_is_on
+    g.heartbeat_pin_id = bootstrap.heartbeat_pin_id
+    g.heartbeat_high_is_on = bootstrap.heartbeat_high_is_on
 
     migrate_config_if_needed()
 
@@ -1183,7 +1175,7 @@ async def main():
     await apply_config(load_from_json(CONFIG_FILENAME) or {})
 
     # set valve_status = 0b1111...1 so that the first apply_valves will turn off all valves
-    valve_status = (1 << len(config["zones"])) - 1
+    g.valve_status = (1 << len(g.config["zones"])) - 1
     info(None, None, "Closing all valves...")
     await apply_valves(0)
 

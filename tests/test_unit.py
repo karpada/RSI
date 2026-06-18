@@ -39,7 +39,7 @@ class TestUnitTests(unittest.TestCase):
                 "log": {"level": 10, "max_lines": 25},
             },
         }
-        patcher = patch("main.config", self.mock_config)
+        patcher = patch("main.g.config", self.mock_config)
         self.addCleanup(patcher.stop)
         patcher.start()
 
