@@ -136,7 +136,7 @@ async def sync_ntp() -> bool:
         info(
             None,
             None,
-            f"@{time.time()} NTP synced, UTC time={time.time() + MICROPYTHON_TO_TIMESTAMP} Local time(GMT{config['options']['settings']['timezone_offset']:+})={time.time() + micropython_to_localtime}",
+            f"@{time.time()} NTP synced, UTC time={time.time() + MICROPYTHON_TO_TIMESTAMP} Local time(GMT{config['options']['settings']['timezone_offset']:+})={get_local_timestamp()}",
         )
         return True
     except OSError:
