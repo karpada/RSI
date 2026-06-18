@@ -759,8 +759,8 @@ async def read_http_headers(reader) -> dict:
         line = await reader.readline()
         if line == b"\r\n" or not line:
             break
-        name, value = line.decode().strip().split(": ", 1)
-        headers[name.lower()] = value
+        name, value = line.decode().strip().split(":", 1)
+        headers[name.lower()] = value.strip()
     return headers
 
 
