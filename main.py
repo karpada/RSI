@@ -302,22 +302,6 @@ async def apply_valves(new_status: int) -> None:
 
 ######################
 # Irrigation scheduler
-CONFIG_FILENAME = "rsi-config.json"
-
-
-def migrate_config_if_needed() -> None:
-    try:
-        stat(CONFIG_FILENAME)
-    except OSError:
-        try:
-            rename("config.json", CONFIG_FILENAME)
-            info(None, None, "Renamed config.json to rsi-config.json")
-        except OSError:
-            pass  # old config does not exist, nothing to do
-
-
-######################
-# Irrigation scheduler
 ######################
 async def schedule_irrigation():
     global schedule_status
@@ -525,6 +509,22 @@ async def schedule_irrigation():
 #########################
 # Configuration functions
 #########################
+
+
+CONFIG_FILENAME = "rsi-config.json"
+
+
+def migrate_config_if_needed() -> None:
+    try:
+        stat(CONFIG_FILENAME)
+    except OSError:
+        try:
+            rename("config.json", CONFIG_FILENAME)
+            info(None, None, "Renamed config.json to rsi-config.json")
+        except OSError:
+            pass  # old config does not exist, nothing to do
+
+
 async def apply_config(new_config: dict) -> None:
     global config
     global schedule_completed_until
