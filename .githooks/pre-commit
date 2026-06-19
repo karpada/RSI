@@ -1,0 +1,4 @@
+#!/bin/sh
+set -e
+
+python3 -m unittest discover tests -p "test_unit.py"

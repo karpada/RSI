@@ -230,9 +230,17 @@ You can easily update your device directly from the web interface under **Settin
 ### Manual Upload (via cURL)
 This method is particularly useful for development. If you wish to upload local modifications, you can upload files manually:
 ```shell
-$ HOST="s2demo.local"
-$ for f in index.html setup.html main.py; do curl -X POST --data-binary @$f $HOST/file/$f | jq; done
-$ curl -X PUT $HOST/reboot
-$ sleep 15 && python3 tests/test_integration.py $HOST
-$ curl $HOST/status | jq
+HOST="s2demo.local"
+for f in index.html setup.html main.py; do curl -X POST --data-binary @$f $HOST/file/$f | jq; done
+curl -X PUT $HOST/reboot
+sleep 15 && python3 tests/test_integration.py $HOST
+curl $HOST/status | jq
+```
+
+## Git Hooks
+
+To automatically run unit tests before each commit, set up a pre-commit hook:
+
+```shell
+git config core.hooksPath .githooks
 ```
