@@ -890,6 +890,7 @@ async def handle_get_status(writer, **kwargs):
         "valve_status": f"{valve_status:08b}",
         "schedule_status": f"{schedule_status:08b}",
         "mcu_temperature": mcu_temperature(),
+        "uptime": time.ticks_ms() // 1000,
         "schedule_completed_until": [
             max(t - now, -1) for t in schedule_completed_until
         ],
