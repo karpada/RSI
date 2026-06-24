@@ -231,10 +231,10 @@ You can easily update your device directly from the web interface under **Settin
 This method is particularly useful for development. If you wish to upload local modifications, you can upload files manually:
 ```shell
 HOST="s2demo.local"
-for f in index.html setup.html main.py; do curl -X POST --data-binary @$f $HOST/file/$f | jq; done
+for f in index.html setup.html main.py; do curl -X POST --data-binary @$f $HOST/file/$f | jq .; done
 curl -X PUT $HOST/reboot
 sleep 15 && python3 tests/test_integration.py $HOST
-curl $HOST/status | jq
+curl $HOST/status | jq -s .
 ```
 
 ## Git Hooks
