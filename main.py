@@ -688,9 +688,10 @@ def read_soil_moisture_raw(zone_id: int) -> int:
     # https://docs.micropython.org/en/latest/esp32/quickref.html#adc-analog-to-digital-conversion
     adc = ADC(soil_moisture_config["adc_pin_id"], atten=ADC.ATTN_11DB)
     raw_reading = 0
-    for i in range(g.config["options"]["soil_moisture_sensor"]["sample_count"]):
+    sample_count = g.config["options"]["soil_moisture_sensor"]["sample_count"]
+    for i in range(sample_count):
         raw_reading += adc.read_u16()
-    raw_reading //= i + 1
+    raw_reading //= sample_count
     if soil_moisture_config["power_pin_id"] >= 0:
         Pin(soil_moisture_config["power_pin_id"], Pin.OUT, value=0)
     return raw_reading
