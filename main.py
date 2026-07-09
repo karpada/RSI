@@ -36,6 +36,7 @@ class GlobalAppState:
         self.schedule_completed_until = []
         self.ad_hoc_irrigation_until = {}
         self.LOG = deque([], 25)
+        self.rtc_adjustments: int = 0
 
 
 g = GlobalAppState()
@@ -45,6 +46,10 @@ g = GlobalAppState()
 def get_local_timestamp() -> int:
     return time.time() + g.micropython_to_localtime
 
+g.rtc_adjustments = get_local_timestamp()
+
+def get_uptime_sec() -> int:
+    return get_local_timestamp() - g.rtc_adjustments
 
 LogLine = namedtuple(
     "LogLine", ["timestamp", "level", "zone_id", "schedule_id", "message"]
@@ -140,7 +145,9 @@ async def keep_wifi_connected():
 # Time functions
 async def sync_ntp() -> bool:
     try:
+        old_ts = get_local_timestamp()
         settime()
+        g.rtc_adjustments += get_local_timestamp() - old_ts
         info(
             None,
             None,
@@ -235,7 +242,9 @@ async def fallback_time_sync():
                     rtc.datetime(),
                     basetime,
                 )
+                old_ts = get_local_timestamp()
                 rtc.datetime(basetime)
+                g.rtc_adjustments += get_local_timestamp() - old_ts
                 warn(
                     None,
                     None,
@@ -640,9 +649,11 @@ async def apply_config(new_config: dict) -> None:
     # log(None, None, f"apply_config({new_config})\n    normalized_config={normalized_config}")
     g.config = normalized_config
 
+    old_ts = get_local_timestamp()
     g.micropython_to_localtime = MICROPYTHON_TO_TIMESTAMP + round(
         g.config["options"]["settings"]["timezone_offset"] * 3600
     )
+    g.rtc_adjustments += get_local_timestamp() - old_ts
     g.heartbeat_pin_id = g.config["options"]["settings"]["heartbeat_pin_id"]
     g.heartbeat_high_is_on = g.config["options"]["settings"]["heartbeat_high_is_on"]
     # disable schedules until fallback_time_sync or NTP synchronization is complete
@@ -893,7 +904,7 @@ async def handle_get_status(writer, **kwargs):
         "valve_status": f"{g.valve_status:08b}",
         "schedule_status": f"{g.schedule_status:08b}",
         "mcu_temperature": mcu_temperature(),
-        "uptime": time.ticks_ms() // 1000,
+        "uptime": get_uptime_sec(),
         "schedule_completed_until": [
             max(t - now, -1) for t in g.schedule_completed_until
         ],
