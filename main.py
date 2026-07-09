@@ -845,6 +845,9 @@ async def handle_post_config(reader, content_length, writer, **kwargs):
         if content_length > 0
         else None
     )
+    if not body:
+        await send_response(writer, "text/html", "Empty config body", status_code=400)
+        return
     await apply_config(body)
     save_as_json(CONFIG_FILENAME, g.config)
     await send_json(writer, g.config)
