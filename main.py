@@ -12,7 +12,7 @@ import urequests as requests
 from uos import rename, remove, stat
 
 # Global variables
-VERSION = "v1.10.11"  # DO NOT EDIT: This line is automatically updated by the version-bump workflow
+VERSION = "v1.10.12"  # DO NOT EDIT: This line is automatically updated by the version-bump workflow
 MICROPYTHON_TO_TIMESTAMP: int = 946684800  # 2000-1970 --> 3155673600 - 2208988800
 TIMESTAMP_2001_01_01: int = (
     978307200  # Monday, This is the date used when ntp is not available
@@ -46,10 +46,13 @@ g = GlobalAppState()
 def get_local_timestamp() -> int:
     return time.time() + g.micropython_to_localtime
 
+
 g.rtc_adjustments = get_local_timestamp()
+
 
 def get_uptime_sec() -> int:
     return get_local_timestamp() - g.rtc_adjustments
+
 
 LogLine = namedtuple(
     "LogLine", ["timestamp", "level", "zone_id", "schedule_id", "message"]
