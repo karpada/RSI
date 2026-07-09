@@ -1093,11 +1093,13 @@ async def send_metrics():
                 params = {
                     "api_key": g.config["options"]["monitoring"]["thingsspeak_apikey"]
                 } | {f"field{i + 1}": m for i, m in enumerate(metrics)}
-                requests.get(
+                r = requests.get(
                     "http://api.thingspeak.com/update?"
                     + "&".join([f"{k}={v}" for k, v in params.items()]),
                     timeout=10,
-                ).close()
+                )
+                r.text
+                r.close()
         except OSError as e:
             warn(None, None, f"failed sending metrics: {e}")
         finally:
