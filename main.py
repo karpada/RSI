@@ -12,7 +12,7 @@ import urequests as requests
 from uos import rename, remove, stat
 
 # Global variables
-VERSION = "v1.10.10"  # DO NOT EDIT: This line is automatically updated by the version-bump workflow
+VERSION = "v1.10.11"  # DO NOT EDIT: This line is automatically updated by the version-bump workflow
 MICROPYTHON_TO_TIMESTAMP: int = 946684800  # 2000-1970 --> 3155673600 - 2208988800
 TIMESTAMP_2001_01_01: int = (
     978307200  # Monday, This is the date used when ntp is not available
@@ -21,6 +21,8 @@ TIMESTAMP_2025_01_01: int = (
     1735689600  # after ntp sync, date will be at least 2025-01-01
 )
 DEFAULT_FREQ = freq()
+
+
 class GlobalAppState:
     def __init__(self):
         self.WIFI_SETUP_MODE = False
@@ -34,6 +36,7 @@ class GlobalAppState:
         self.schedule_completed_until = []
         self.ad_hoc_irrigation_until = {}
         self.LOG = deque([], 25)
+
 
 g = GlobalAppState()
 
@@ -285,11 +288,15 @@ async def apply_valves(new_status: int) -> None:
         return
 
     debug(
-        None, None, f"apply_valves({new_status:08b}), g.valve_status={g.valve_status:08b}"
+        None,
+        None,
+        f"apply_valves({new_status:08b}), g.valve_status={g.valve_status:08b}",
     )
     relay_pin_id = g.config["options"]["settings"]["relay_pin_id"]
     if relay_pin_id >= 0:
-        relay_value = 1 if g.config["options"]["settings"]["relay_active_is_high"] else 0
+        relay_value = (
+            1 if g.config["options"]["settings"]["relay_active_is_high"] else 0
+        )
         Pin(relay_pin_id, Pin.OUT, value=relay_value)
         await asyncio.sleep(0.250)  # wait for H-Bridges to power up
 
@@ -307,7 +314,6 @@ async def apply_valves(new_status: int) -> None:
 # Irrigation scheduler
 ######################
 async def schedule_irrigation():
-
     await asyncio.sleep(5)
     while True:
         if g.heartbeat_pin_id > 0:
@@ -528,7 +534,6 @@ def migrate_config_if_needed() -> None:
 
 
 async def apply_config(new_config: dict) -> None:
-
     info(None, None, f"Applying new config = {new_config}")
     normalized_config = {"zones": [], "schedules": [], "options": {}}
     for i, z in enumerate(new_config.get("zones", [])):
@@ -834,7 +839,9 @@ async def handle_put_pause(writer, query_params, **kwargs):
     duration_sec = int(query_params.get("duration_sec", 0))
     schedule_pause_until = get_local_timestamp() + duration_sec
     info(None, None, f"Pausing schedule for {duration_sec} seconds")
-    g.schedule_completed_until[:] = [schedule_pause_until] * len(g.schedule_completed_until)
+    g.schedule_completed_until[:] = [schedule_pause_until] * len(
+        g.schedule_completed_until
+    )
     await send_json(writer, {"status": "ok"})
 
 
@@ -1081,7 +1088,6 @@ async def send_metrics():
 
 
 async def run_setup_mode_if_needed(button_pin_id: int, wait_time: int) -> None:
-
     try:
         stat(CONFIG_FILENAME)
     except OSError:
@@ -1143,7 +1149,6 @@ async def process_ota_update():
 
 
 async def main():
-
     if sys.maxsize >> 30 == 0:
         warn(None, None, ">>> We have less than 31 bits :(")
 
