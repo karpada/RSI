@@ -1131,6 +1131,10 @@ async def process_ota_update():
     github_repo_name = "RSI"
     try:
         stat("update_tag.txt")
+    except OSError:
+        return
+
+    try:
         info(None, None, "Starting OTA update...")
         with open("update_tag.txt", "r") as f:
             tag = f.read().strip()
@@ -1155,12 +1159,11 @@ async def process_ota_update():
             for filename in files_to_update:
                 rename(f"{filename}.ota", filename)
             info(None, None, f"Update to tag '{tag}' successful. Rebooting...")
-            await asyncio.sleep(1)
-            reset()
         else:
             error(None, None, f"Update to tag '{tag}' failed for some files.")
-    except OSError:
-        pass
+    finally:
+        await asyncio.sleep(1)
+        reset()
 
 
 async def main():
