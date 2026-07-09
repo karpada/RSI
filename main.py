@@ -1086,7 +1086,7 @@ async def send_metrics():
                 if z["adc_pin_id"] >= 0 and not z["master"]
             ]
             # mem_alloc(), mcu_temperature()
-            if "thingsspeak_apikey" in g.config["options"]["monitoring"]:
+            if g.config["options"]["monitoring"]["thingsspeak_apikey"]:
                 params = {
                     "api_key": g.config["options"]["monitoring"]["thingsspeak_apikey"]
                 } | {f"field{i + 1}": m for i, m in enumerate(metrics)}
