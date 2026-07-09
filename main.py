@@ -797,13 +797,14 @@ def get_status_message(status_code):
 
 
 async def send_response(writer, content_type, response, status_code=200):
+    encoded = response.encode("utf-8") if response else b""
     writer.write(
-        f"HTTP/1.0 {status_code} {get_status_message(status_code)}\r\nContent-type: {content_type}\r\n\r\n".encode(
+        f"HTTP/1.0 {status_code} {get_status_message(status_code)}\r\nContent-type: {content_type}\r\nContent-Length: {len(encoded)}\r\n\r\n".encode(
             "utf-8"
         )
     )
-    if response:
-        writer.write(response.encode("utf-8"))
+    if encoded:
+        writer.write(encoded)
     await writer.drain()
 
 
@@ -812,8 +813,9 @@ async def send_json(writer, data, status_code=200):
 
 
 async def send_file(writer, content_type, filename, status_code=200):
+    file_size = stat(filename)[6]
     writer.write(
-        f"HTTP/1.0 {status_code} {get_status_message(status_code)}\r\nContent-type: {content_type}\r\n\r\n".encode(
+        f"HTTP/1.0 {status_code} {get_status_message(status_code)}\r\nContent-type: {content_type}\r\nContent-Length: {file_size}\r\n\r\n".encode(
             "utf-8"
         )
     )
