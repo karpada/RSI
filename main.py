@@ -325,6 +325,190 @@ async def apply_valves(new_status: int) -> None:
 ######################
 # Irrigation scheduler
 ######################
+def compute_desired_valves(
+    config, local_timestamp, schedule_completed_until,
+    ad_hoc_irrigation_until, schedule_status, valve_status, get_soil_moisture_fn
+):
+    valve_desired = 0
+    new_schedule_status = 0
+    zones = config["zones"]
+    for i, s in enumerate(config["schedules"]):
+        # debug(None, i, "checking schedule")
+        if local_timestamp < schedule_completed_until[i]:
+            continue
+
+        zone_id = s["zone_id"]
+        z = zones[zone_id]
+
+        # following checks disabled the schedule until config change
+        if not config["options"]["settings"]["enable_irrigation_schedule"]:
+            schedule_completed_until[i] = sys.maxsize
+            debug(
+                zone_id,
+                i,
+                "Schedule[%s] zone[%s]='%s' disabled because all schedules is disabled",
+                i,
+                zone_id,
+                z["name"],
+            )
+            continue
+
+        if not s["enabled"]:
+            schedule_completed_until[i] = sys.maxsize
+            debug(
+                zone_id,
+                i,
+                "Schedule[%s] zone[%s]='%s' disabled because schedule is disabled",
+                i,
+                zone_id,
+                z["name"],
+            )
+            continue
+
+        duration_sec = s["duration_sec"]
+        if 0 <= z["irrigation_factor_override"]:
+            duration_sec *= z["irrigation_factor_override"]
+        duration_sec = min(round(duration_sec), 86400)
+        if duration_sec <= 0:
+            schedule_completed_until[i] = sys.maxsize
+            debug(
+                zone_id,
+                i,
+                "Schedule[%s] zone[%s]='%s' disabled because duration_sec is zero",
+                i,
+                zone_id,
+                z["name"],
+            )
+            continue
+
+        if s["expiry"] and local_timestamp > s["expiry"]:
+            schedule_completed_until[i] = sys.maxsize
+            debug(
+                zone_id,
+                i,
+                "Schedule[%s] zone[%s]='%s' disabled because schedule expired",
+                i,
+                zone_id,
+                z["name"],
+            )
+            continue
+
+        sec_till_start = (86400 + s["start_sec"] - local_timestamp % 86400) % 86400
+        sec_till_end = (sec_till_start + duration_sec) % 86400
+
+        if sec_till_start < sec_till_end:
+            # we are outside the schedule window = (start, end], skip till sec_till_start==86399
+            schedule_completed_until[i] = local_timestamp + sec_till_start + 1
+            debug(
+                zone_id,
+                i,
+                "Schedule[%s] zone[%s]='%s' suspended until next start: %s",
+                i,
+                zone_id,
+                z["name"],
+                schedule_completed_until[i],
+            )
+            continue
+
+        # weekday of current schedule start time, monday is 0, sunday is 6
+        weekday = ((local_timestamp + sec_till_start) // 86400 + 2) % 7
+        if not s["day_mask"] & (1 << weekday):
+            schedule_completed_until[i] = local_timestamp + sec_till_start + 1
+            debug(
+                zone_id,
+                i,
+                "Schedule[%s] zone[%s]='%s' suspended until next start %s because of day_mask=0x%02x weekday=%s",
+                i,
+                zone_id,
+                z["name"],
+                schedule_completed_until[i],
+                s["day_mask"],
+                weekday,
+            )
+            continue
+
+        if (
+            s["enable_soil_moisture_sensor"]
+            and (soil_moisture := get_soil_moisture_fn(s["zone_id"])) is not None
+        ):
+            # soil_moisture value needs to be taken into account
+            if schedule_status & (1 << i):
+                # schedule is active, check if we should stop
+                if soil_moisture >= z["soil_moisture_wet"]:
+                    schedule_completed_until[i] = (
+                        local_timestamp + sec_till_start + 1
+                    )
+                    info(
+                        zone_id,
+                        i,
+                        "Schedule[%s] zone[%s]='%s' stopped and suspended until next start %s because soil_moisture=%s is wet",
+                        i,
+                        zone_id,
+                        z["name"],
+                        schedule_completed_until[i],
+                        soil_moisture,
+                    )
+                    continue
+            else:
+                # schedule is about to start, is it dry enough?
+                if soil_moisture >= z["soil_moisture_dry"]:
+                    schedule_completed_until[i] = (
+                        local_timestamp + sec_till_start + 1
+                    )
+                    info(
+                        zone_id,
+                        i,
+                        "Schedule[%s] zone[%s]='%s' won't start and suspended until next start %s because soil_moisture=%s is not dry enough",
+                        i,
+                        zone_id,
+                        z["name"],
+                        schedule_completed_until[i],
+                        soil_moisture,
+                    )
+                    continue
+
+        # schedule status unaffected by interval duty cycle (avoiding log spam)
+        new_schedule_status |= 1 << i
+
+        if s["interval_duration_sec"] > 0:
+            if (86400 - sec_till_start) % s["interval_duration_sec"] >= s[
+                "interval_on_sec"
+            ]:
+                # we are outside the fogger window
+                continue
+
+        # we should irrigate, set the valve status
+        valve_desired |= 1 << s["zone_id"]
+        # debug(zone_id, i, f"valve_desired={valve_desired:08b} for schedule={s}")
+
+    # check if we have ad-hoc irrigation
+    for zone_id, end_time in list(ad_hoc_irrigation_until.items()):
+        z = zones[zone_id]
+        if end_time > local_timestamp:
+            valve_desired |= 1 << zone_id
+            if not valve_status & (1 << zone_id):
+                info(
+                    zone_id,
+                    None,
+                    f"Ad-hoc irrigation in zone[{zone_id}]='{z['name']}' (ends in {end_time - local_timestamp}s) is starting",
+                )
+        else:
+            info(
+                zone_id,
+                None,
+                f"Ad-hoc irrigation in zone[{zone_id}]='{z['name']}' has ended",
+            )
+            del ad_hoc_irrigation_until[zone_id]
+
+    # debug(None, None, f"valve_desired={valve_desired:08b}")
+    if valve_desired > 0:
+        for i, zone in enumerate(zones):
+            if zone["master"]:
+                valve_desired |= 1 << i
+
+    return valve_desired, new_schedule_status
+
+
 async def schedule_irrigation():
     await asyncio.sleep(5)
     while True:
@@ -332,182 +516,11 @@ async def schedule_irrigation():
             Pin(g.heartbeat_pin_id, Pin.OUT, value=1 if g.heartbeat_high_is_on else 0)
 
         local_timestamp = get_local_timestamp()
-
-        valve_desired = 0
-        new_schedule_status = 0
-        for i, s in enumerate(g.config["schedules"]):
-            # debug(None, i, "checking schedule")
-            if local_timestamp < g.schedule_completed_until[i]:
-                continue
-
-            zone_id = s["zone_id"]
-            z = g.config["zones"][zone_id]
-
-            # following checks disabled the schedule until g.config change
-            if not g.config["options"]["settings"]["enable_irrigation_schedule"]:
-                g.schedule_completed_until[i] = sys.maxsize
-                debug(
-                    zone_id,
-                    i,
-                    "Schedule[%s] zone[%s]='%s' disabled because all schedules is disabled",
-                    i,
-                    zone_id,
-                    z["name"],
-                )
-                continue
-
-            if not s["enabled"]:
-                g.schedule_completed_until[i] = sys.maxsize
-                debug(
-                    zone_id,
-                    i,
-                    "Schedule[%s] zone[%s]='%s' disabled because schedule is disabled",
-                    i,
-                    zone_id,
-                    z["name"],
-                )
-                continue
-
-            duration_sec = s["duration_sec"]
-            if 0 <= z["irrigation_factor_override"]:
-                duration_sec *= z["irrigation_factor_override"]
-            duration_sec = min(round(duration_sec), 86400)
-            if duration_sec <= 0:
-                g.schedule_completed_until[i] = sys.maxsize
-                debug(
-                    zone_id,
-                    i,
-                    "Schedule[%s] zone[%s]='%s' disabled because duration_sec is zero",
-                    i,
-                    zone_id,
-                    z["name"],
-                )
-                continue
-
-            if s["expiry"] and local_timestamp > s["expiry"]:
-                g.schedule_completed_until[i] = sys.maxsize
-                debug(
-                    zone_id,
-                    i,
-                    "Schedule[%s] zone[%s]='%s' disabled because schedule expired",
-                    i,
-                    zone_id,
-                    z["name"],
-                )
-                continue
-
-            sec_till_start = (86400 + s["start_sec"] - local_timestamp % 86400) % 86400
-            sec_till_end = (sec_till_start + duration_sec) % 86400
-
-            if sec_till_start < sec_till_end:
-                # we are outside the schedule window = (start, end], skip till sec_till_start==86399
-                g.schedule_completed_until[i] = local_timestamp + sec_till_start + 1
-                debug(
-                    zone_id,
-                    i,
-                    "Schedule[%s] zone[%s]='%s' suspended until next start: %s",
-                    i,
-                    zone_id,
-                    z["name"],
-                    g.schedule_completed_until[i],
-                )
-                continue
-
-            # weekday of current schedule start time, monday is 0, sunday is 6
-            weekday = ((local_timestamp + sec_till_start) // 86400 + 2) % 7
-            if not s["day_mask"] & (1 << weekday):
-                g.schedule_completed_until[i] = local_timestamp + sec_till_start + 1
-                debug(
-                    zone_id,
-                    i,
-                    "Schedule[%s] zone[%s]='%s' suspended until next start %s because of day_mask=%07b weekday=%s",
-                    i,
-                    zone_id,
-                    z["name"],
-                    g.schedule_completed_until[i],
-                    s["day_mask"],
-                    weekday,
-                )
-                continue
-
-            if (
-                s["enable_soil_moisture_sensor"]
-                and (soil_moisture := get_soil_moisture_milli(s["zone_id"])) is not None
-            ):
-                # soil_moisture value needs to be taken into account
-                if g.schedule_status & (1 << i):
-                    # schedule is active, check if we should stop
-                    if soil_moisture >= z["soil_moisture_wet"]:
-                        g.schedule_completed_until[i] = (
-                            local_timestamp + sec_till_start + 1
-                        )
-                        info(
-                            zone_id,
-                            i,
-                            "Schedule[%s] zone[%s]='%s' stopped and suspended until next start %s because soil_moisture=%s is wet",
-                            i,
-                            zone_id,
-                            z["name"],
-                            g.schedule_completed_until[i],
-                            soil_moisture,
-                        )
-                        continue
-                else:
-                    # schedule is about to start, is it dry enough?
-                    if soil_moisture >= z["soil_moisture_dry"]:
-                        g.schedule_completed_until[i] = (
-                            local_timestamp + sec_till_start + 1
-                        )
-                        info(
-                            zone_id,
-                            i,
-                            "Schedule[%s] zone[%s]='%s' won't start and suspended until next start %s because soil_moisture=%s is not dry enough",
-                            i,
-                            zone_id,
-                            z["name"],
-                            g.schedule_completed_until[i],
-                            soil_moisture,
-                        )
-                        continue
-
-            # schedule status unaffected by interval duty cycle (avoiding log spam)
-            new_schedule_status |= 1 << i
-
-            if s["interval_duration_sec"] > 0:
-                if (86400 - sec_till_start) % s["interval_duration_sec"] >= s[
-                    "interval_on_sec"
-                ]:
-                    # we are outside the fogger window
-                    continue
-
-            # we should irrigate, set the valve status
-            valve_desired |= 1 << s["zone_id"]
-            # debug(zone_id, i, f"valve_desired={valve_desired:08b} for schedule={s}")
-
-        # check if we have ad-hoc irrigation
-        for zone_id, end_time in list(g.ad_hoc_irrigation_until.items()):
-            z = g.config["zones"][zone_id]
-            if end_time > local_timestamp:
-                valve_desired |= 1 << zone_id
-                if not g.valve_status & (1 << zone_id):
-                    info(
-                        zone_id,
-                        None,
-                        f"Ad-hoc irrigation in zone[{zone_id}]='{z['name']}' (ends in {end_time - local_timestamp}s) is starting",
-                    )
-            else:
-                info(
-                    zone_id,
-                    None,
-                    f"Ad-hoc irrigation in zone[{zone_id}]='{z['name']}' has ended",
-                )
-                del g.ad_hoc_irrigation_until[zone_id]
-
-        # debug(None, None, f"valve_desired={valve_desired:08b}")
-        if valve_desired > 0:
-            for i, zone in enumerate(g.config["zones"]):
-                if zone["master"]:
-                    valve_desired |= 1 << i
+        valve_desired, new_schedule_status = compute_desired_valves(
+            g.config, local_timestamp, g.schedule_completed_until,
+            g.ad_hoc_irrigation_until, g.schedule_status, g.valve_status,
+            get_soil_moisture_milli
+        )
 
         for i, s in enumerate(g.config["schedules"]):
             if (g.schedule_status ^ new_schedule_status) & (1 << i):
