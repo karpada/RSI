@@ -545,11 +545,12 @@ def migrate_config_if_needed() -> None:
             pass  # old config does not exist, nothing to do
 
 
-async def apply_config(new_config: dict) -> None:
-    info(None, None, f"Applying new config = {new_config}")
-    normalized_config = {"zones": [], "schedules": [], "options": {}}
-    for i, z in enumerate(new_config.get("zones", [])):
-        normalized_config["zones"].append(
+def normalize_config(
+    raw: dict, default_hostname: str, default_heartbeat_pin_id: int, default_heartbeat_high_is_on: bool
+) -> dict:
+    normalized = {"zones": [], "schedules": [], "options": {}}
+    for i, z in enumerate(raw.get("zones", [])):
+        normalized["zones"].append(
             {
                 "name": str(z.get("name", f"zone-{i}")),
                 "master": bool(z.get("master", False)),
@@ -566,8 +567,8 @@ async def apply_config(new_config: dict) -> None:
                 "power_pin_id": int(z.get("power_pin_id", -1)),
             }
         )
-    for s in new_config.get("schedules", []):
-        normalized_config["schedules"].append(
+    for s in raw.get("schedules", []):
+        normalized["schedules"].append(
             {
                 "enabled": bool(s.get("enabled", True)),
                 "zone_id": int(s["zone_id"]),
@@ -582,7 +583,7 @@ async def apply_config(new_config: dict) -> None:
                 "expiry": int(s.get("expiry", 0)),
             }
         )
-    bo = new_config.get("options", {})
+    bo = raw.get("options", {})
     for key in [
         "wifi",
         "monitoring",
@@ -592,16 +593,11 @@ async def apply_config(new_config: dict) -> None:
         "fallback_time_sync",
     ]:
         bo.setdefault(key, {})
-    normalized_config["options"] = {
+    normalized["options"] = {
         "wifi": {
             "ssid": str(bo["wifi"].get("ssid", "")),
             "password": str(bo["wifi"].get("password", "")),
-            "hostname": str(
-                bo["wifi"].get(
-                    "hostname",
-                    "rsi-" + "".join([f"{b:02x}" for b in g.wlan.config("mac")[3:6]]),
-                )
-            ),
+            "hostname": str(bo["wifi"].get("hostname", default_hostname)),
         },
         "monitoring": {
             "thingsspeak_apikey": str(bo["monitoring"].get("thingsspeak_apikey", "")),
@@ -620,10 +616,10 @@ async def apply_config(new_config: dict) -> None:
             "timezone_offset": float(bo["settings"].get("timezone_offset", -7)),
             "relay_pin_id": int(bo["settings"].get("relay_pin_id", -1)),
             "heartbeat_pin_id": int(
-                bo["settings"].get("heartbeat_pin_id", g.heartbeat_pin_id)
+                bo["settings"].get("heartbeat_pin_id", default_heartbeat_pin_id)
             ),
             "heartbeat_high_is_on": bool(
-                bo["settings"].get("heartbeat_high_is_on", g.heartbeat_high_is_on)
+                bo["settings"].get("heartbeat_high_is_on", default_heartbeat_high_is_on)
             ),
             "relay_active_is_high": bool(
                 bo["settings"].get("relay_active_is_high", False)
@@ -644,6 +640,17 @@ async def apply_config(new_config: dict) -> None:
             ),
         },
     }
+    return normalized
+
+
+async def apply_config(new_config: dict) -> None:
+    info(None, None, f"Applying new config = {new_config}")
+    default_hostname = "rsi-" + "".join(
+        [f"{b:02x}" for b in g.wlan.config("mac")[3:6]]
+    )
+    normalized_config = normalize_config(
+        new_config, default_hostname, g.heartbeat_pin_id, g.heartbeat_high_is_on
+    )
 
     # if zones changed, turn off all valves
     if g.config and g.config.get("zones", []) != normalized_config["zones"]:
