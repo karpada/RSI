@@ -12,7 +12,7 @@ import urequests as requests
 from uos import rename, remove, stat
 
 # Global variables
-VERSION = "v1.10.18"  # DO NOT EDIT: This line is automatically updated by the version-bump workflow
+VERSION = "v1.10.19"  # DO NOT EDIT: This line is automatically updated by the version-bump workflow
 MICROPYTHON_TO_TIMESTAMP: int = 946684800  # 2000-1970 --> 3155673600 - 2208988800
 TIMESTAMP_2001_01_01: int = (
     978307200  # Monday, This is the date used when ntp is not available
@@ -546,7 +546,10 @@ def migrate_config_if_needed() -> None:
 
 
 def normalize_config(
-    raw: dict, default_hostname: str, default_heartbeat_pin_id: int, default_heartbeat_high_is_on: bool
+    raw: dict,
+    default_hostname: str,
+    default_heartbeat_pin_id: int,
+    default_heartbeat_high_is_on: bool,
 ) -> dict:
     normalized = {"zones": [], "schedules": [], "options": {}}
     for i, z in enumerate(raw.get("zones", [])):
@@ -645,9 +648,7 @@ def normalize_config(
 
 async def apply_config(new_config: dict) -> None:
     info(None, None, f"Applying new config = {new_config}")
-    default_hostname = "rsi-" + "".join(
-        [f"{b:02x}" for b in g.wlan.config("mac")[3:6]]
-    )
+    default_hostname = "rsi-" + "".join([f"{b:02x}" for b in g.wlan.config("mac")[3:6]])
     normalized_config = normalize_config(
         new_config, default_hostname, g.heartbeat_pin_id, g.heartbeat_high_is_on
     )
