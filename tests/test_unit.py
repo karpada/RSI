@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import MagicMock, mock_open, patch
+from unittest.mock import MagicMock, mock_open, patch, Mock
 import sys
 import os
 
@@ -18,6 +18,7 @@ sys.modules["uasyncio"] = MagicMock()
 sys.modules["urequests"] = MagicMock()
 sys.modules["uos"] = MagicMock()
 
+# noqa: E402
 from main import get_soil_moisture_milli, save_as_json, load_from_json, compute_desired_valves  # noqa: E402
 
 
@@ -148,7 +149,7 @@ class TestComputeDesiredValves(unittest.TestCase):
         if ad_hoc is None:
             ad_hoc = {}
         if soil_fn is None:
-            soil_fn = lambda zone_id: None
+            soil_fn = Mock(return_value=None)
         return compute_desired_valves(
             config, timestamp, schedule_completed_until,
             ad_hoc, schedule_status, valve_status, soil_fn
@@ -247,7 +248,7 @@ class TestComputeDesiredValves(unittest.TestCase):
             _make_schedule(enable_soil_moisture_sensor=True)
         ])
         # soil_moisture=400 >= soil_moisture_dry=300 → too wet to start
-        v, s = self._call(config, 1800, soil_fn=lambda z: 400, schedule_status=0)
+        v, s = self._call(config, 1800, soil_fn=Mock(return_value=400), schedule_status=0)
         self.assertEqual(v, 0)
 
     def test_soil_moisture_dry_enough_to_start(self):
@@ -255,7 +256,7 @@ class TestComputeDesiredValves(unittest.TestCase):
             _make_schedule(enable_soil_moisture_sensor=True)
         ])
         # soil_moisture=200 < soil_moisture_dry=300 → dry enough
-        v, s = self._call(config, 1800, soil_fn=lambda z: 200, schedule_status=0)
+        v, s = self._call(config, 1800, soil_fn=Mock(return_value=200), schedule_status=0)
         self.assertEqual(v, 0b1)
 
     def test_soil_moisture_wet_stops_active_schedule(self):
@@ -263,7 +264,7 @@ class TestComputeDesiredValves(unittest.TestCase):
             _make_schedule(enable_soil_moisture_sensor=True)
         ])
         # Schedule already active (schedule_status bit set), moisture=800 >= wet=700
-        v, s = self._call(config, 1800, soil_fn=lambda z: 800, schedule_status=0b1)
+        v, s = self._call(config, 1800, soil_fn=Mock(return_value=800), schedule_status=0b1)
         self.assertEqual(v, 0)
         self.assertEqual(s, 0)
 
