@@ -18,7 +18,7 @@ sys.modules["uasyncio"] = MagicMock()
 sys.modules["urequests"] = MagicMock()
 sys.modules["uos"] = MagicMock()
 
-# noqa: E402
+# codespell:ignore
 from main import get_soil_moisture_milli, save_as_json, load_from_json, compute_desired_valves  # noqa: E402
 
 
