@@ -18,8 +18,8 @@ sys.modules["uasyncio"] = MagicMock()
 sys.modules["urequests"] = MagicMock()
 sys.modules["uos"] = MagicMock()
 
-# codespell:ignore
-from main import get_soil_moisture_milli, save_as_json, load_from_json, compute_desired_valves  # noqa: E402
+# ruff: noqa: E402
+from main import get_soil_moisture_milli, save_as_json, load_from_json, compute_desired_valves
 
 
 def _make_config(zones=None, schedules=None, enable_irrigation_schedule=True):
