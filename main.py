@@ -12,7 +12,7 @@ import urequests as requests
 from uos import rename, remove, stat
 
 # Global variables
-VERSION = "v1.10.19"  # DO NOT EDIT: This line is automatically updated by the version-bump workflow
+VERSION = "v1.10.20"  # DO NOT EDIT: This line is automatically updated by the version-bump workflow
 MICROPYTHON_TO_TIMESTAMP: int = 946684800  # 2000-1970 --> 3155673600 - 2208988800
 TIMESTAMP_2001_01_01: int = (
     978307200  # Monday, This is the date used when ntp is not available
@@ -326,8 +326,13 @@ async def apply_valves(new_status: int) -> None:
 # Irrigation scheduler
 ######################
 def compute_desired_valves(
-    config, local_timestamp, schedule_completed_until,
-    ad_hoc_irrigation_until, schedule_status, valve_status, get_soil_moisture_fn
+    config,
+    local_timestamp,
+    schedule_completed_until,
+    ad_hoc_irrigation_until,
+    schedule_status,
+    valve_status,
+    get_soil_moisture_fn,
 ):
     valve_desired = 0
     new_schedule_status = 0
@@ -435,9 +440,7 @@ def compute_desired_valves(
             if schedule_status & (1 << i):
                 # schedule is active, check if we should stop
                 if soil_moisture >= z["soil_moisture_wet"]:
-                    schedule_completed_until[i] = (
-                        local_timestamp + sec_till_start + 1
-                    )
+                    schedule_completed_until[i] = local_timestamp + sec_till_start + 1
                     info(
                         zone_id,
                         i,
@@ -452,9 +455,7 @@ def compute_desired_valves(
             else:
                 # schedule is about to start, is it dry enough?
                 if soil_moisture >= z["soil_moisture_dry"]:
-                    schedule_completed_until[i] = (
-                        local_timestamp + sec_till_start + 1
-                    )
+                    schedule_completed_until[i] = local_timestamp + sec_till_start + 1
                     info(
                         zone_id,
                         i,
@@ -517,9 +518,13 @@ async def schedule_irrigation():
 
         local_timestamp = get_local_timestamp()
         valve_desired, new_schedule_status = compute_desired_valves(
-            g.config, local_timestamp, g.schedule_completed_until,
-            g.ad_hoc_irrigation_until, g.schedule_status, g.valve_status,
-            get_soil_moisture_milli
+            g.config,
+            local_timestamp,
+            g.schedule_completed_until,
+            g.ad_hoc_irrigation_until,
+            g.schedule_status,
+            g.valve_status,
+            get_soil_moisture_milli,
         )
 
         for i, s in enumerate(g.config["schedules"]):
